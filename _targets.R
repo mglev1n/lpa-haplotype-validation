@@ -7,22 +7,24 @@ library(crew)
 
 # Define local controller
 controller_local <- crew_controller_local(
-  name = 'LPA-haplotype_local',
-  workers = parallelly::availableCores(),  # Adjust based on available CPU cores
+  name = "LPA-haplotype_local",
+  workers = parallelly::availableCores(), # Adjust based on available CPU cores
   seconds_idle = 10
 )
 
 # Set global options
 tar_option_set(
-  packages = c('tidyverse', 'targets', 'tarchetypes', 'lpapredictr', 'qs', 'gt',
-               'crew', 'tidymodels', 'patchwork', 'vroom', 'ggsci'),
+  packages = c(
+    "tidyverse", "targets", "tarchetypes", "lpapredictr", "qs", "gt",
+    "crew", "tidymodels", "patchwork", "vroom", "ggsci"
+  ),
   controller = crew::crew_controller_group(controller_local),
   resources = tar_resources(
-    crew = tar_resources_crew(controller = 'LPA-haplotype_local')
+    crew = tar_resources_crew(controller = "LPA-haplotype_local")
   ),
   format = "qs",
-  storage = 'worker',
-  retrieval = 'worker'
+  storage = "worker",
+  retrieval = "worker"
 )
 
 # Pipeline configuration
@@ -281,7 +283,7 @@ The LPA prediction was performed using the lpapredictr package, which implements
 
 
 ',
-"rmarkdown/lpa_validation_report.Rmd"
+  "rmarkdown/lpa_validation_report.Rmd"
 )
 
 # Define the pipeline
@@ -293,7 +295,6 @@ list(
     format = "file",
     description = "Path to VCF file containing phased genotypes for LPA region"
   ),
-
   tar_target(
     measured_file,
     "input/measured.csv",
@@ -307,22 +308,28 @@ list(
     {
       # Check if VCF file exists
       if (!file.exists(vcf_file)) {
-        stop("VCF file not found: ", vcf_file,
-             "\nPlease place your VCF file at input/genotypes.vcf.gz")
+        stop(
+          "VCF file not found: ", vcf_file,
+          "\nPlease place your VCF file at input/genotypes.vcf.gz"
+        )
       }
 
       # Check if measured file exists and has required columns
       if (!file.exists(measured_file)) {
-        stop("Measured LPA file not found: ", measured_file,
-             "\nPlease place your measured LPA file at input/measured.csv")
+        stop(
+          "Measured LPA file not found: ", measured_file,
+          "\nPlease place your measured LPA file at input/measured.csv"
+        )
       }
 
       df <- vroom::vroom(measured_file, show_col_types = FALSE)
       required_cols <- c("ID", "lpa_nmol_max", "GIA")
       missing_cols <- setdiff(required_cols, names(df))
       if (length(missing_cols) > 0) {
-        stop("Missing required columns in measured file: ",
-             paste(missing_cols, collapse = ", "))
+        stop(
+          "Missing required columns in measured file: ",
+          paste(missing_cols, collapse = ", ")
+        )
       }
 
       # Return TRUE if validation passes
@@ -342,7 +349,6 @@ list(
     description = "Run LPA prediction on phased genotypes from VCF file"
   ),
 
-  # REMOVED: lpa_predictions_file target to avoid storing identifiable data
 
   # Read measured LPA values
   tar_target(
@@ -354,7 +360,6 @@ list(
     description = "Read measured LPA values and demographics from CSV file"
   ),
 
-  # REMOVED: lpa_measured_file target to avoid storing identifiable data
 
   # Combine predicted and measured values
   tar_target(
@@ -389,7 +394,6 @@ list(
     description = "Combine predicted and measured LPA values for validation analysis"
   ),
 
-  # REMOVED: lpa_validation_df_rds and lpa_validation_df_csv targets to avoid storing identifiable data
 
   # Demographics table overall with improved error handling
   tar_target(
@@ -399,8 +403,10 @@ list(
       available_cols <- names(lpa_validation_df)
 
       # Define columns we'd ideally like to include (if they exist)
-      ideal_demo_cols <- c("age", "sex", "GIA", "lpa_nmol_max", "IHD", "HTN", "HLD", "HF",
-                           "CKD", "DM", "AF", "PVD", "IS")
+      ideal_demo_cols <- c(
+        "age", "sex", "GIA", "lpa_nmol_max", "IHD", "HTN", "HLD", "HF",
+        "CKD", "DM", "AF", "PVD", "IS"
+      )
 
       # Find which columns actually exist in the data
       demo_cols <- intersect(ideal_demo_cols, available_cols)
@@ -466,36 +472,41 @@ list(
       })
 
       # Create summary table, wrapped in tryCatch for extra safety
-      tbl <- tryCatch({
-        lpa_validation_df %>%
-          select(all_of(demo_cols)) %>%
-          gtsummary::tbl_summary(
-            missing = "no",
-            label = label_expr
+      tbl <- tryCatch(
+        {
+          lpa_validation_df %>%
+            select(all_of(demo_cols)) %>%
+            gtsummary::tbl_summary(
+              missing = "no",
+              label = label_expr
+            )
+        },
+        error = function(e) {
+          # Fallback if gtsummary fails
+          warning(
+            "Error in creating gtsummary table: ", e$message,
+            "\nCreating simple summary instead."
           )
-      }, error = function(e) {
-        # Fallback if gtsummary fails
-        warning("Error in creating gtsummary table: ", e$message,
-                "\nCreating simple summary instead.")
 
-        # Create a simplified table manually
-        basic_stats <- tibble(
-          variable = "cohort_size",
-          label = "Cohort Size",
-          Value = nrow(lpa_validation_df)
-        )
+          # Create a simplified table manually
+          basic_stats <- tibble(
+            variable = "cohort_size",
+            label = "Cohort Size",
+            Value = nrow(lpa_validation_df)
+          )
 
-        # Add mean Lp(a) if available
-        if ("lpa_nmol_max" %in% demo_cols) {
-          basic_stats <- bind_rows(basic_stats, tibble(
-            variable = "lpa_nmol_max",
-            label = "Mean Lp(a) (nmol/L)",
-            Value = sprintf("%.1f", mean(lpa_validation_df$lpa_nmol_max, na.rm = TRUE))
-          ))
+          # Add mean Lp(a) if available
+          if ("lpa_nmol_max" %in% demo_cols) {
+            basic_stats <- bind_rows(basic_stats, tibble(
+              variable = "lpa_nmol_max",
+              label = "Mean Lp(a) (nmol/L)",
+              Value = sprintf("%.1f", mean(lpa_validation_df$lpa_nmol_max, na.rm = TRUE))
+            ))
+          }
+
+          return(basic_stats)
         }
-
-        return(basic_stats)
-      })
+      )
 
       # Extract raw data frame depending on what type tbl is
       if (inherits(tbl, "tbl_summary")) {
@@ -542,7 +553,6 @@ list(
     description = "Save overall demographics table to CSV file"
   ),
 
-  # REMOVED: lpa_demographics_overall_qs target as it's redundant with CSV
 
   # Demographics table by ancestry with improved error handling
   tar_target(
@@ -557,8 +567,10 @@ list(
       }
 
       # Define columns we'd ideally like to include (if they exist)
-      ideal_demo_cols <- c("age", "sex", "lpa_nmol_max", "IHD", "HTN", "HLD", "HF",
-                           "CKD", "DM", "AF", "PVD", "IS")
+      ideal_demo_cols <- c(
+        "age", "sex", "lpa_nmol_max", "IHD", "HTN", "HLD", "HF",
+        "CKD", "DM", "AF", "PVD", "IS"
+      )
 
       # Find which columns actually exist in the data
       demo_cols <- intersect(ideal_demo_cols, available_cols)
@@ -572,8 +584,10 @@ list(
       if (length(demo_cols) < 2) {
         message("Few demographic columns available. Creating minimal summary table.")
         # Add any available columns that might be useful
-        extra_cols <- setdiff(available_cols, c("GIA", demo_cols, "ID", "n", "lpa_pred_nm",
-                                                "lpa_pred_se", "lpa_pred_lci95", "lpa_pred_uci95"))
+        extra_cols <- setdiff(available_cols, c(
+          "GIA", demo_cols, "ID", "n", "lpa_pred_nm",
+          "lpa_pred_se", "lpa_pred_lci95", "lpa_pred_uci95"
+        ))
         if (length(extra_cols) > 0) {
           # Add up to 3 extra columns
           demo_cols <- c(demo_cols, head(extra_cols, 3))
@@ -634,36 +648,43 @@ list(
       })
 
       # Create stratified table, wrapped in tryCatch for extra safety
-      tbl <- tryCatch({
-        lpa_validation_df %>%
-          select(GIA, all_of(demo_cols)) %>%
-          gtsummary::tbl_summary(
-            by = GIA,
-            missing = "no",
-            label = label_expr
+      tbl <- tryCatch(
+        {
+          lpa_validation_df %>%
+            select(GIA, all_of(demo_cols)) %>%
+            gtsummary::tbl_summary(
+              by = GIA,
+              missing = "no",
+              label = label_expr
+            )
+        },
+        error = function(e) {
+          # Fallback if gtsummary fails
+          warning(
+            "Error in creating gtsummary table: ", e$message,
+            "\nCreating simple summary by ancestry instead."
           )
-      }, error = function(e) {
-        # Fallback if gtsummary fails
-        warning("Error in creating gtsummary table: ", e$message,
-                "\nCreating simple summary by ancestry instead.")
 
-        # Create a simplified table manually - counts and mean Lp(a) by ancestry
-        ancestry_counts <- lpa_validation_df %>%
-          group_by(GIA) %>%
-          summarize(Count = n(), .groups = "drop")
-
-        # Add mean Lp(a) if available
-        if ("lpa_nmol_max" %in% demo_cols) {
-          lpa_by_ancestry <- lpa_validation_df %>%
+          # Create a simplified table manually - counts and mean Lp(a) by ancestry
+          ancestry_counts <- lpa_validation_df %>%
             group_by(GIA) %>%
-            summarize(Mean_Lpa = sprintf("%.1f", mean(lpa_nmol_max, na.rm = TRUE)),
-                      .groups = "drop")
+            summarize(Count = n(), .groups = "drop")
 
-          ancestry_counts <- left_join(ancestry_counts, lpa_by_ancestry, by = "GIA")
+          # Add mean Lp(a) if available
+          if ("lpa_nmol_max" %in% demo_cols) {
+            lpa_by_ancestry <- lpa_validation_df %>%
+              group_by(GIA) %>%
+              summarize(
+                Mean_Lpa = sprintf("%.1f", mean(lpa_nmol_max, na.rm = TRUE)),
+                .groups = "drop"
+              )
+
+            ancestry_counts <- left_join(ancestry_counts, lpa_by_ancestry, by = "GIA")
+          }
+
+          return(ancestry_counts)
         }
-
-        return(ancestry_counts)
-      })
+      )
 
       # Extract raw data frame and create tidy data depending on what type tbl is
       if (inherits(tbl, "tbl_summary")) {
@@ -684,7 +705,7 @@ list(
           # Extract ancestry code from column name (stat_0, stat_1, etc.)
           mutate(
             ancestry_index = as.integer(gsub("stat_", "", ancestry_code)),
-            ancestry = ancestry_vals[ancestry_index + 1]  # +1 because R is 1-indexed
+            ancestry = ancestry_vals[ancestry_index + 1] # +1 because R is 1-indexed
           ) %>%
           select(variable, ancestry, value) %>%
           tidyr::drop_na()
@@ -750,7 +771,6 @@ list(
     description = "Save ancestry-stratified demographics table to CSV file (tidy/long format)"
   ),
 
-  # REMOVED: lpa_demographics_by_ancestry_qs target as it's redundant with CSV
 
   # Prepare ancestry ordering and colors
   tar_target(
@@ -789,14 +809,16 @@ list(
       # Validate that all ancestries in the data are valid
       invalid_ancestries <- setdiff(present_ancestries, valid_ancestries)
       if (length(invalid_ancestries) > 0) {
-        stop("Invalid ancestry codes detected in GIA column: ",
-             paste(invalid_ancestries, collapse = ", "),
-             "\nValid codes are: ", paste(valid_ancestries, collapse = ", "))
+        stop(
+          "Invalid ancestry codes detected in GIA column: ",
+          paste(invalid_ancestries, collapse = ", "),
+          "\nValid codes are: ", paste(valid_ancestries, collapse = ", ")
+        )
       }
 
       # Create consistent color palette using JAMA colors
       # This ensures the same ancestry always gets the same color across cohorts
-      jama_palette <- ggsci::pal_jama()(7)  # Get 7 colors from JAMA palette
+      jama_palette <- ggsci::pal_jama()(7) # Get 7 colors from JAMA palette
 
       # Create named vector mapping ancestries to colors
       ancestry_colors <- setNames(
@@ -874,7 +896,6 @@ list(
     },
     description = "Save overall validation plot as qs file for programmatic manipulation"
   ),
-
   tar_file(
     plot_validation_by_ancestry_qs,
     {
@@ -884,7 +905,6 @@ list(
     },
     description = "Save by-ancestry validation plot as qs file for programmatic manipulation"
   ),
-
   tar_file(
     plot_validation_pdf,
     {
@@ -894,7 +914,6 @@ list(
     },
     description = "Save combined validation plot as PDF"
   ),
-
   tar_file(
     plot_validation_qs,
     {
@@ -980,7 +999,6 @@ list(
     },
     description = "Save overall distribution plot as qs file for programmatic manipulation"
   ),
-
   tar_file(
     plot_distribution_by_ancestry_qs,
     {
@@ -990,7 +1008,6 @@ list(
     },
     description = "Save by-ancestry distribution plot as qs file for programmatic manipulation"
   ),
-
   tar_file(
     plot_distribution_pdf,
     {
@@ -1000,7 +1017,6 @@ list(
     },
     description = "Save distribution plot as PDF"
   ),
-
   tar_file(
     plot_distribution_qs,
     {
@@ -1045,7 +1061,6 @@ list(
     },
     description = "Save comparison plot as PDF"
   ),
-
   tar_file(
     plot_comparison_qs,
     {
@@ -1061,9 +1076,9 @@ list(
     bootstrap_config,
     {
       list(
-        do_bootstrap = TRUE,     # Set to FALSE for quicker, less accurate analysis
-        resamples = 1000,        # Number of bootstrap resamples
-        thresholds = c(125, 150, 175, 200)  # LPA thresholds in nmol/L
+        do_bootstrap = TRUE, # Set to FALSE for quicker, less accurate analysis
+        resamples = 1000, # Number of bootstrap resamples
+        thresholds = c(125, 150, 175, 200) # LPA thresholds in nmol/L
       )
     },
     description = "Configure bootstrap parameters for performance evaluation"
@@ -1075,7 +1090,6 @@ list(
     yardstick::metric_set(yardstick::rsq, yardstick::mape, yardstick::rmse),
     description = "Define numeric metrics for performance evaluation (R², MAPE, RMSE)"
   ),
-
   tar_target(
     class_metrics,
     yardstick::metric_set(yardstick::sens, yardstick::spec, yardstick::ppv, yardstick::npv, yardstick::accuracy, yardstick::f_meas),
@@ -1151,7 +1165,6 @@ list(
     description = "Save numeric metrics by group to CSV file"
   ),
 
-  # REMOVED: lpa_numeric_metrics_grouped_ci_rds as it's redundant with CSV
 
   # Numeric metrics overall with bootstrap
   tar_target(
@@ -1209,7 +1222,6 @@ list(
     description = "Save overall numeric metrics to CSV file"
   ),
 
-  # REMOVED: lpa_numeric_metrics_overall_ci_rds as it's redundant with CSV
 
   # Create classification dataset
   tar_target(
@@ -1291,7 +1303,6 @@ list(
     description = "Save classification metrics by group to CSV file"
   ),
 
-  # REMOVED: lpa_class_metrics_grouped_ci_rds as it's redundant with CSV
 
   # Classification metrics overall
   tar_target(
@@ -1344,7 +1355,6 @@ list(
     description = "Save overall classification metrics to CSV file"
   ),
 
-  # REMOVED: lpa_class_metrics_overall_ci_rds as it's redundant with CSV
 
   # Combine all metrics
   tar_target(
@@ -1375,7 +1385,6 @@ list(
     description = "Save combined metrics to CSV file"
   ),
 
-  # REMOVED: lpa_boot_all_metrics_rds as it's redundant with CSV
 
   # Group sizes for plotting
   tar_target(
@@ -1499,7 +1508,6 @@ list(
     },
     description = "Save performance plot as PDF"
   ),
-
   tar_file(
     lpa_performance_plot_qs,
     {
@@ -1546,7 +1554,6 @@ list(
     description = "Save NNT metrics to CSV file"
   ),
 
-  # REMOVED: lpa_nnt_rds as it's redundant with CSV
 
   # Plot NNT
   tar_target(
@@ -1600,7 +1607,6 @@ list(
     },
     description = "Save NNT plot as PDF"
   ),
-
   tar_file(
     lpa_nnt_plot_qs,
     {
@@ -1647,13 +1653,17 @@ list(
       rsq_row <- numeric_overall %>% filter(.metric == "rsq")
       rmse_row <- numeric_overall %>% filter(.metric == "rmse")
 
-      cat("R-squared:", round(rsq_row$estimate, 3),
-          "(95% CI:", round(rsq_row$lower_ci, 3), "-",
-          round(rsq_row$upper_ci, 3), ")\n")
+      cat(
+        "R-squared:", round(rsq_row$estimate, 3),
+        "(95% CI:", round(rsq_row$lower_ci, 3), "-",
+        round(rsq_row$upper_ci, 3), ")\n"
+      )
 
-      cat("RMSE:", round(rmse_row$estimate, 1), "nmol/L",
-          "(95% CI:", round(rmse_row$lower_ci, 1), "-",
-          round(rmse_row$upper_ci, 1), ")\n")
+      cat(
+        "RMSE:", round(rmse_row$estimate, 1), "nmol/L",
+        "(95% CI:", round(rmse_row$lower_ci, 1), "-",
+        round(rmse_row$upper_ci, 1), ")\n"
+      )
 
       # Classification metrics
       class_overall <- lpa_class_metrics_overall_ci %>%
@@ -1665,28 +1675,38 @@ list(
       npv_row <- class_overall %>% filter(.metric == "npv")
 
       cat("\nAt threshold of 150 nmol/L:\n")
-      cat("Sensitivity:", round(sens_row$estimate * 100, 1), "%",
-          "(95% CI:", round(sens_row$lower_ci * 100, 1), "-",
-          round(sens_row$upper_ci * 100, 1), "%)\n")
+      cat(
+        "Sensitivity:", round(sens_row$estimate * 100, 1), "%",
+        "(95% CI:", round(sens_row$lower_ci * 100, 1), "-",
+        round(sens_row$upper_ci * 100, 1), "%)\n"
+      )
 
-      cat("Specificity:", round(spec_row$estimate * 100, 1), "%",
-          "(95% CI:", round(spec_row$lower_ci * 100, 1), "-",
-          round(spec_row$upper_ci * 100, 1), "%)\n")
+      cat(
+        "Specificity:", round(spec_row$estimate * 100, 1), "%",
+        "(95% CI:", round(spec_row$lower_ci * 100, 1), "-",
+        round(spec_row$upper_ci * 100, 1), "%)\n"
+      )
 
-      cat("PPV:", round(ppv_row$estimate * 100, 1), "%",
-          "(95% CI:", round(ppv_row$lower_ci * 100, 1), "-",
-          round(ppv_row$upper_ci * 100, 1), "%)\n")
+      cat(
+        "PPV:", round(ppv_row$estimate * 100, 1), "%",
+        "(95% CI:", round(ppv_row$lower_ci * 100, 1), "-",
+        round(ppv_row$upper_ci * 100, 1), "%)\n"
+      )
 
-      cat("NPV:", round(npv_row$estimate * 100, 1), "%",
-          "(95% CI:", round(npv_row$lower_ci * 100, 1), "-",
-          round(npv_row$upper_ci * 100, 1), "%)\n")
+      cat(
+        "NPV:", round(npv_row$estimate * 100, 1), "%",
+        "(95% CI:", round(npv_row$lower_ci * 100, 1), "-",
+        round(npv_row$upper_ci * 100, 1), "%)\n"
+      )
 
       # NNT
       nnt_row <- lpa_nnt %>% filter(GIA == "Overall")
 
-      cat("\nNumber Needed to Test:", round(nnt_row$estimate, 1),
-          "(95% CI:", round(nnt_row$lower_ci, 1), "-",
-          round(nnt_row$upper_ci, 1), ")\n")
+      cat(
+        "\nNumber Needed to Test:", round(nnt_row$estimate, 1),
+        "(95% CI:", round(nnt_row$lower_ci, 1), "-",
+        round(nnt_row$upper_ci, 1), ")\n"
+      )
 
       sink()
 
