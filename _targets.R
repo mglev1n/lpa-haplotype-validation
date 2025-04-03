@@ -1374,102 +1374,102 @@ list(
   ),
 
   # Create a summary report
-  tar_target(
-    summary_report,
-    {
-      file_path <- "Results/summary_report.txt"
-
-      # Create a text summary of key findings
-      sink(file_path)
-
-      cat("LPA VALIDATION SUMMARY REPORT\n")
-      cat("=============================\n\n")
-
-      cat("Study Population:\n")
-      cat("----------------\n")
-      cat("Total samples analyzed:", nrow(lpa_validation_df), "\n")
-
-      # Group counts
-      group_counts <- lpa_validation_df %>%
-        count(GIA) %>%
-        arrange(desc(n))
-
-      cat("Samples by ancestry group:\n")
-      for (i in 1:nrow(group_counts)) {
-        cat("  ", group_counts$GIA[i], ":", group_counts$n[i], "\n")
-      }
-
-      cat("\nPerformance Metrics (Overall):\n")
-      cat("----------------------------\n")
-
-      # Overall metrics
-      numeric_overall <- lpa_numeric_metrics_overall_ci %>%
-        filter(.metric %in% c("rsq", "rmse"))
-
-      rsq_row <- numeric_overall %>% filter(.metric == "rsq")
-      rmse_row <- numeric_overall %>% filter(.metric == "rmse")
-
-      cat(
-        "R-squared:", round(rsq_row$estimate, 3),
-        "(95% CI:", round(rsq_row$lower_ci, 3), "-",
-        round(rsq_row$upper_ci, 3), ")\n"
-      )
-
-      cat(
-        "RMSE:", round(rmse_row$estimate, 1), "nmol/L",
-        "(95% CI:", round(rmse_row$lower_ci, 1), "-",
-        round(rmse_row$upper_ci, 1), ")\n"
-      )
-
-      # Classification metrics
-      class_overall <- lpa_class_metrics_overall_ci %>%
-        filter(threshold == 150, .metric %in% c("sens", "spec", "ppv", "npv"))
-
-      sens_row <- class_overall %>% filter(.metric == "sens")
-      spec_row <- class_overall %>% filter(.metric == "spec")
-      ppv_row <- class_overall %>% filter(.metric == "ppv")
-      npv_row <- class_overall %>% filter(.metric == "npv")
-
-      cat("\nAt threshold of 150 nmol/L:\n")
-      cat(
-        "Sensitivity:", round(sens_row$estimate * 100, 1), "%",
-        "(95% CI:", round(sens_row$lower_ci * 100, 1), "-",
-        round(sens_row$upper_ci * 100, 1), "%)\n"
-      )
-
-      cat(
-        "Specificity:", round(spec_row$estimate * 100, 1), "%",
-        "(95% CI:", round(spec_row$lower_ci * 100, 1), "-",
-        round(spec_row$upper_ci * 100, 1), "%)\n"
-      )
-
-      cat(
-        "PPV:", round(ppv_row$estimate * 100, 1), "%",
-        "(95% CI:", round(ppv_row$lower_ci * 100, 1), "-",
-        round(ppv_row$upper_ci * 100, 1), "%)\n"
-      )
-
-      cat(
-        "NPV:", round(npv_row$estimate * 100, 1), "%",
-        "(95% CI:", round(npv_row$lower_ci * 100, 1), "-",
-        round(npv_row$upper_ci * 100, 1), "%)\n"
-      )
-
-      # NNT
-      nnt_row <- lpa_nnt %>% filter(GIA == "Overall")
-
-      cat(
-        "\nNumber Needed to Test:", round(nnt_row$estimate, 1),
-        "(95% CI:", round(nnt_row$lower_ci, 1), "-",
-        round(nnt_row$upper_ci, 1), ")\n"
-      )
-
-      sink()
-
-      file_path
-    },
-    description = "Generate summary report with key findings"
-  ),
+  # tar_target(
+  #   summary_report,
+  #   {
+  #     file_path <- "Results/summary_report.txt"
+  #
+  #     # Create a text summary of key findings
+  #     sink(file_path)
+  #
+  #     cat("LPA VALIDATION SUMMARY REPORT\n")
+  #     cat("=============================\n\n")
+  #
+  #     cat("Study Population:\n")
+  #     cat("----------------\n")
+  #     cat("Total samples analyzed:", nrow(lpa_validation_df), "\n")
+  #
+  #     # Group counts
+  #     group_counts <- lpa_validation_df %>%
+  #       count(GIA) %>%
+  #       arrange(desc(n))
+  #
+  #     cat("Samples by ancestry group:\n")
+  #     for (i in 1:nrow(group_counts)) {
+  #       cat("  ", group_counts$GIA[i], ":", group_counts$n[i], "\n")
+  #     }
+  #
+  #     cat("\nPerformance Metrics (Overall):\n")
+  #     cat("----------------------------\n")
+  #
+  #     # Overall metrics
+  #     numeric_overall <- lpa_numeric_metrics_overall_ci %>%
+  #       filter(.metric %in% c("rsq", "rmse"))
+  #
+  #     rsq_row <- numeric_overall %>% filter(.metric == "rsq")
+  #     rmse_row <- numeric_overall %>% filter(.metric == "rmse")
+  #
+  #     cat(
+  #       "R-squared:", round(rsq_row$estimate, 3),
+  #       "(95% CI:", round(rsq_row$lower_ci, 3), "-",
+  #       round(rsq_row$upper_ci, 3), ")\n"
+  #     )
+  #
+  #     cat(
+  #       "RMSE:", round(rmse_row$estimate, 1), "nmol/L",
+  #       "(95% CI:", round(rmse_row$lower_ci, 1), "-",
+  #       round(rmse_row$upper_ci, 1), ")\n"
+  #     )
+  #
+  #     # Classification metrics
+  #     class_overall <- lpa_class_metrics_overall_ci %>%
+  #       filter(threshold == 150, .metric %in% c("sens", "spec", "ppv", "npv"))
+  #
+  #     sens_row <- class_overall %>% filter(.metric == "sens")
+  #     spec_row <- class_overall %>% filter(.metric == "spec")
+  #     ppv_row <- class_overall %>% filter(.metric == "ppv")
+  #     npv_row <- class_overall %>% filter(.metric == "npv")
+  #
+  #     cat("\nAt threshold of 150 nmol/L:\n")
+  #     cat(
+  #       "Sensitivity:", round(sens_row$estimate * 100, 1), "%",
+  #       "(95% CI:", round(sens_row$lower_ci * 100, 1), "-",
+  #       round(sens_row$upper_ci * 100, 1), "%)\n"
+  #     )
+  #
+  #     cat(
+  #       "Specificity:", round(spec_row$estimate * 100, 1), "%",
+  #       "(95% CI:", round(spec_row$lower_ci * 100, 1), "-",
+  #       round(spec_row$upper_ci * 100, 1), "%)\n"
+  #     )
+  #
+  #     cat(
+  #       "PPV:", round(ppv_row$estimate * 100, 1), "%",
+  #       "(95% CI:", round(ppv_row$lower_ci * 100, 1), "-",
+  #       round(ppv_row$upper_ci * 100, 1), "%)\n"
+  #     )
+  #
+  #     cat(
+  #       "NPV:", round(npv_row$estimate * 100, 1), "%",
+  #       "(95% CI:", round(npv_row$lower_ci * 100, 1), "-",
+  #       round(npv_row$upper_ci * 100, 1), "%)\n"
+  #     )
+  #
+  #     # NNT
+  #     nnt_row <- lpa_nnt %>% filter(GIA == "Overall")
+  #
+  #     cat(
+  #       "\nNumber Needed to Test:", round(nnt_row$estimate, 1),
+  #       "(95% CI:", round(nnt_row$lower_ci, 1), "-",
+  #       round(nnt_row$upper_ci, 1), ")\n"
+  #     )
+  #
+  #     sink()
+  #
+  #     file_path
+  #   },
+  #   description = "Generate summary report with key findings"
+  # ),
 
 
   # Generate comprehensive report using R Markdown
