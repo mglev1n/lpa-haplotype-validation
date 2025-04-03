@@ -2,11 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
-inputs/
 _targets/
 lpa_validation_results.zip
 lpa-haplotype-validation.Rproj
 Results/
 .Rprofile
-input
+input/genotypes.vcf.gz
+input/measured.csv
 rmarkdown/lpa_validation_report.html
