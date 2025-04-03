@@ -1,0 +1,235 @@
+---
+title: "LPA Prediction Validation Report"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: cosmo
+    code_folding: hide
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+library(targets)
+library(tidyverse)
+library(knitr)
+library(gt)
+library(patchwork)
+options(width = 120)
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 7
+)
+
+# Load key objects from the pipeline
+tar_load(lpa_predictions)
+tar_load(lpa_measured)
+tar_load(lpa_validation_df)
+tar_load(lpa_demographics_overall)
+tar_load(lpa_demographics_by_ancestry)
+tar_load(plot_validation)
+tar_load(plot_distribution)
+tar_load(plot_comparison)
+tar_load(lpa_performance_plot)
+tar_load(lpa_nnt_plot)
+tar_load(lpa_numeric_metrics_overall_ci)
+tar_load(lpa_class_metrics_overall_ci)
+tar_load(lpa_numeric_metrics_grouped_ci)
+tar_load(lpa_class_metrics_grouped_ci)
+tar_load(bootstrap_config)
+```
+
+<details>
+
+```{r details}
+targets::tar_visnetwork(targets_only = TRUE)
+```
+
+```{r session-info}
+sessioninfo::session_info()
+```
+
+</details>
+
+## Executive Summary
+
+This report summarizes the validation of the LPA prediction model across multiple ancestry groups. The model predicts Lp(a) levels from genotype data, which can be used for risk stratification in clinical settings.
+
+```{r summary-stats}
+# Calculate key statistics
+n_genotyped <- nrow(lpa_predictions) / 2  # Divide by 2 because each sample has 2 haplotypes
+n_measured <- nrow(lpa_measured)
+n_validatable <- nrow(lpa_validation_df)
+```
+
+**Key Metrics:**
+
+- **Number of genotyped samples**: `r n_genotyped`
+- **Number of samples with measured Lp(a)**: `r n_measured`
+- **Number of samples used in validation**: `r n_validatable`
+- **Overall R²**: `r round(lpa_numeric_metrics_overall_ci %>% filter(.metric == "rsq") %>% pull(estimate), 3)`
+- **Overall RMSE**: `r round(lpa_numeric_metrics_overall_ci %>% filter(.metric == "rmse") %>% pull(estimate), 1)` nmol/L
+
+## Study Population
+
+### Demographics
+
+```{r demographics-overall}
+lpa_demographics_overall$gt_table
+```
+
+### Demographics by Ancestry Group
+
+```{r demographics-ancestry}
+lpa_demographics_by_ancestry$gt_table
+```
+
+### Sample Count by Ancestry Group
+
+```{r ancestry-counts}
+lpa_validation_df %>%
+  count(GIA) %>%
+  arrange(desc(n)) %>%
+  rename(`Ancestry Group` = GIA, `Sample Count` = n) %>%
+  kable()
+```
+
+## Validation Results
+
+### Overall Prediction Performance
+
+```{r validation-plot, fig.height=9}
+plot_validation$combined
+```
+
+### Distribution of Measured vs Predicted Values
+
+```{r distribution-plot, fig.height=9}
+plot_distribution$combined
+```
+
+### Measured Lp(a) by Ancestry
+
+```{r comparison-plot}
+plot_comparison
+```
+
+## Performance Metrics
+
+### Numeric Metrics
+
+```{r numeric-metrics}
+lpa_numeric_metrics_grouped_ci %>%
+  pivot_wider(
+    id_cols = GIA,
+    names_from = .metric,
+    values_from = c(estimate, lower_ci, upper_ci)
+  ) %>%
+  mutate(across(starts_with("estimate"), round, 2)) %>%
+  mutate(across(starts_with("lower_ci"), round, 2)) %>%
+  mutate(across(starts_with("upper_ci"), round, 2)) %>%
+  mutate(
+    `R²` = sprintf("%0.2f (%0.2f-%0.2f)", estimate_rsq, lower_ci_rsq, upper_ci_rsq),
+    RMSE = sprintf("%0.1f (%0.1f-%0.1f)", estimate_rmse, lower_ci_rmse, upper_ci_rmse),
+    MAPE = sprintf("%0.1f%% (%0.1f%%-%0.1f%%)", estimate_mape, lower_ci_mape, upper_ci_mape)
+  ) %>%
+  select(GIA, `R²`, RMSE, MAPE) %>%
+  arrange(match(GIA, c("Overall", unique(lpa_validation_df$GIA)))) %>%
+  kable()
+```
+
+### Classification Metrics (Threshold = 150 nmol/L)
+
+```{r classification-metrics}
+lpa_class_metrics_grouped_ci %>%
+  filter(threshold == 150) %>%
+  mutate(
+    performance = case_when(
+      .metric == "sens" ~ "Sensitivity",
+      .metric == "spec" ~ "Specificity",
+      .metric == "ppv" ~ "PPV",
+      .metric == "npv" ~ "NPV",
+      .metric == "accuracy" ~ "Accuracy",
+      .metric == "f_meas" ~ "F1 Score",
+      TRUE ~ .metric
+    )
+  ) %>%
+  mutate(
+    value = sprintf("%0.1f%% (%0.1f%%-%0.1f%%)",
+                   estimate * 100, lower_ci * 100, upper_ci * 100)
+  ) %>%
+  select(GIA, performance, value) %>%
+  pivot_wider(
+    id_cols = GIA,
+    names_from = performance,
+    values_from = value
+  ) %>%
+  arrange(match(GIA, c("Overall", unique(lpa_validation_df$GIA)))) %>%
+  kable()
+```
+
+### Performance Metrics Visualization
+
+```{r performance-plots, fig.height=11}
+lpa_performance_plot$combined
+```
+
+### Number Needed to Test (NNT)
+
+Number of individuals who would need to be tested with the genetic predictor to identify one individual with Lp(a) > 150 nmol/L:
+
+```{r nnt-plot}
+lpa_nnt_plot
+```
+
+## Multiple Thresholds Analysis
+
+Performance at different clinically relevant Lp(a) thresholds:
+
+```{r threshold-analysis}
+# Create a table showing performance at different thresholds
+thresholds <- bootstrap_config$thresholds
+
+threshold_metrics <- lpa_class_metrics_overall_ci %>%
+  filter(.metric %in% c("sens", "spec", "ppv", "npv")) %>%
+  filter(threshold %in% thresholds) %>%
+  mutate(
+    pretty_metric = case_when(
+      .metric == "sens" ~ "Sensitivity",
+      .metric == "spec" ~ "Specificity",
+      .metric == "ppv" ~ "PPV",
+      .metric == "npv" ~ "NPV",
+      TRUE ~ .metric
+    )
+  ) %>%
+  mutate(
+    value = sprintf("%0.1f%% (%0.1f%%-%0.1f%%)",
+                   estimate * 100, lower_ci * 100, upper_ci * 100)
+  ) %>%
+  select(threshold, pretty_metric, value) %>%
+  pivot_wider(
+    id_cols = threshold,
+    names_from = pretty_metric,
+    values_from = value
+  )
+
+threshold_metrics %>%
+  mutate(Threshold = paste0(threshold, " nmol/L")) %>%
+  select(Threshold, Sensitivity, Specificity, PPV, NPV) %>%
+  kable()
+```
+
+## Methods
+
+The LPA prediction was performed using the lpapredictr package, which implements a model based on LPA haplotypes. Validation was performed by comparing predicted Lp(a) levels to measured levels across multiple genetic ancestry groups. Performance metrics were calculated using bootstrapping with `r bootstrap_config$resamples` resamples to determine confidence intervals.
+
+## Conclusions
+
+- The genetic predictor of Lp(a) shows `r if(lpa_numeric_metrics_overall_ci %>% filter(.metric == "rsq") %>% pull(estimate) > 0.5) "strong" else "moderate"` predictive performance across all ancestry groups (R² = `r round(lpa_numeric_metrics_overall_ci %>% filter(.metric == "rsq") %>% pull(estimate), 2)`)
+- Performance varies by ancestry group, with the strongest performance in `r lpa_numeric_metrics_grouped_ci %>% filter(.metric == "rsq") %>% arrange(desc(estimate)) %>% filter(GIA != "Overall") %>% slice(1) %>% pull(GIA)` (R² = `r round(lpa_numeric_metrics_grouped_ci %>% filter(.metric == "rsq") %>% arrange(desc(estimate)) %>% filter(GIA != "Overall") %>% slice(1) %>% pull(estimate), 2)`)
+- Classification performance at the 150 nmol/L threshold has good sensitivity (`r round(lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "sens") %>% pull(estimate) * 100, 1)`%) and specificity (`r round(lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "spec") %>% pull(estimate) * 100, 1)`%)
+- The genetic predictor can be used to prioritize patients for more expensive clinical Lp(a) testing, with an NNT of approximately `r round((lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "ppv") %>% pull(estimate)) ^ -1, 1)` to identify one individual with elevated Lp(a)

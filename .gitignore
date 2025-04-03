@@ -4,9 +4,9 @@
 .Ruserdata
 inputs/
 _targets/
-rmarkdown
 lpa_validation_results.zip
 lpa-haplotype-validation.Rproj
-Results
+Results/
 .Rprofile
 input
+rmarkdown/lpa_validation_report.html
