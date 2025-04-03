@@ -4,6 +4,10 @@ LABEL maintainer="Michael Levin <michael.levin@pennmedicine.upenn.edu>"
 LABEL description="LPA Prediction Validation Pipeline"
 LABEL version="0.1.0"
 
+# Accept GitHub PAT as build argument
+ARG GITHUB_PAT
+ENV GITHUB_PAT=$GITHUB_PAT
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev \
@@ -29,7 +33,9 @@ RUN R -e 'install.packages("renv")'
 COPY renv.lock /app/
 
 # Initialize renv and restore packages from lockfile
-RUN cd /app && R -e 'renv::init(); renv::restore()'
+# Use the provided GitHub PAT to access private repositories
+RUN cd /app && \
+    R -e 'Sys.setenv(GITHUB_PAT=Sys.getenv("GITHUB_PAT")); renv::init(); renv::restore()'
 
 # Create directories
 RUN mkdir -p /app/input /app/Results /app/rmarkdown
