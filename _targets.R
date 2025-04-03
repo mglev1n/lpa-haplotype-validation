@@ -87,6 +87,18 @@ tar_load(lpa_class_metrics_grouped_ci)
 tar_load(bootstrap_config)
 ```
 
+<details>
+
+```{r details}
+targets::tar_visnetwork(targets_only = TRUE)
+```
+
+```{r}
+sessioninfo::session_info()
+```
+
+</details>
+
 ## Executive Summary
 
 This report summarizes the validation of the LPA prediction model across multiple ancestry groups. The model predicts Lp(a) levels from genotype data, which can be used for risk stratification in clinical settings.
@@ -264,7 +276,10 @@ The LPA prediction was performed using the lpapredictr package, which implements
 - The genetic predictor of Lp(a) shows `r if(lpa_numeric_metrics_overall_ci %>% filter(.metric == "rsq") %>% pull(estimate) > 0.5) "strong" else "moderate"` predictive performance across all ancestry groups (R² = `r round(lpa_numeric_metrics_overall_ci %>% filter(.metric == "rsq") %>% pull(estimate), 2)`)
 - Performance varies by ancestry group, with the strongest performance in `r lpa_numeric_metrics_grouped_ci %>% filter(.metric == "rsq") %>% arrange(desc(estimate)) %>% filter(GIA != "Overall") %>% slice(1) %>% pull(GIA)` (R² = `r round(lpa_numeric_metrics_grouped_ci %>% filter(.metric == "rsq") %>% arrange(desc(estimate)) %>% filter(GIA != "Overall") %>% slice(1) %>% pull(estimate), 2)`)
 - Classification performance at the 150 nmol/L threshold has good sensitivity (`r round(lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "sens") %>% pull(estimate) * 100, 1)`%) and specificity (`r round(lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "spec") %>% pull(estimate) * 100, 1)`%)
-- The genetic predictor can be used to prioritize patients for more expensive clinical Lp(a) testing, with an NNT of approximately `r round(lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "ppv") %>% pull(estimate) ^ -1, 1)` to identify one individual with elevated Lp(a)
+- The genetic predictor can be used to prioritize patients for more expensive clinical Lp(a) testing, with an NNT of approximately `r round((lpa_class_metrics_overall_ci %>% filter(threshold == 150, .metric == "ppv") %>% pull(estimate)) ^ -1, 1)` to identify one individual with elevated Lp(a)
+
+
+
 ',
 "rmarkdown/lpa_validation_report.Rmd"
 )
@@ -1694,8 +1709,8 @@ list(
       zip_file <- "lpa_validation_results.zip"
 
       # Ensure the report is included in the zip
-      report_file <- tar_read(lpa_validation_report)
-      file.copy(report_file, "Results/lpa_validation_report.html", overwrite = TRUE)
+      report_file <- lpa_validation_report
+      file.copy(report_file[1], "Results/lpa_validation_report.html", overwrite = TRUE)
 
       # Check if zip is available; if not, use alternative method
       if (requireNamespace("zip", quietly = TRUE)) {
