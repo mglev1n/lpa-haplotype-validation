@@ -1,4 +1,4 @@
-FROM rocker/tidyverse:4.3.2
+FROM bioconductor/tidyverse:3.17
 
 LABEL maintainer="Michael Levin <michael.levin@pennmedicine.upenn.edu>"
 LABEL description="LPA Prediction Validation Pipeline"
