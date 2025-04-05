@@ -20,7 +20,7 @@ Place a phased VCF file at `input/genotypes.vcf.gz` containing genotypes for the
 **Preparation Example using PLINK2:**
 ```bash
 plink2 --pfile your_dataset --chr 6 --from-bp 159500000 --to-bp 161700000 \
-  --export vcf bgz vcf-dosage='HDS' \
+  --export vcf bgz id-paste=iid vcf-dosage='HDS' \
   --out input/genotypes
 ```
 

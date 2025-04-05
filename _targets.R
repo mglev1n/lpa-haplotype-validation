@@ -123,7 +123,7 @@ list(
     {
       # Process predicted values - sum both haplotypes for each sample
       pred_summary <- lpa_predictions %>%
-        separate_wider_delim(cols = ID, names = c(NA, "ID"), delim = "_") %>%
+        # separate_wider_delim(cols = ID, names = c(NA, "ID"), delim = "_") %>%
         group_by(ID) %>%
         summarize(
           lpa_pred_nm = sum(Lpa_pred_nM),
