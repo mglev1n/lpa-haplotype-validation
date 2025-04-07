@@ -1,18 +1,19 @@
-# _targets.R
+# _targets.R ----------------------------------------------------------------
 
+# Load Packages ------------------------------------------------------------
 library(targets)
 library(tarchetypes)
 library(tidyverse)
 library(crew)
 
-# Define local controller
+# Controller Setup ---------------------------------------------------------
 controller_local <- crew_controller_local(
   name = "LPA-haplotype_local",
   workers = parallelly::availableCores(),
   seconds_idle = 10
 )
 
-# Set global options
+# Global Options -----------------------------------------------------------
 tar_option_set(
   packages = c(
     "tidyverse", "targets", "tarchetypes", "lpapredictr", "qs", "gt",
@@ -27,24 +28,23 @@ tar_option_set(
   retrieval = "worker"
 )
 
-# Pipeline configuration
+# Pipeline Configuration ---------------------------------------------------
 tar_option_set(
   error = "continue" # Continue pipeline despite errors in individual targets
 )
 
-# Create Results directory if it doesn't exist
+# Create Directories -------------------------------------------------------
 if (!dir.exists("Results")) {
   dir.create("Results")
 }
 
-# Create rmarkdown directory if it doesn't exist
 if (!dir.exists("rmarkdown")) {
   dir.create("rmarkdown")
 }
 
-# Define the pipeline
+# Define the pipeline ------------------------------------------------------
 list(
-  # Input file paths
+  # Input File Paths -------------------------------------------------------
   tar_target(
     vcf_file,
     "input/genotypes.vcf.gz",
@@ -58,7 +58,7 @@ list(
     description = "Path to CSV file containing measured LPA values and demographics"
   ),
 
-  # Validation for input files
+  # Validation Checks ------------------------------------------------------
   tar_target(
     validate_inputs,
     {
@@ -94,7 +94,7 @@ list(
     description = "Validate that input files exist and have the required format"
   ),
 
-  # Run LPA prediction
+  # LPA Prediction ---------------------------------------------------------
   tar_target(
     lpa_predictions,
     {
@@ -106,7 +106,7 @@ list(
   ),
 
 
-  # Read measured LPA values
+  ## Read Measured LPA Values -----------------------------------------------
   tar_target(
     lpa_measured,
     {
@@ -134,19 +134,16 @@ list(
     description = "Summarize LPA predictions by ID with confidence intervals"
   ),
 
-  # Combine predicted and measured values
+  ## Combine Predicted and Measured Values ----------------------------------
   tar_target(
     lpa_pred_measured_df,
     {
-
       # Join predicted and measured values
       lpa_pred_summary %>%
         inner_join(lpa_measured, by = "ID")
     },
     description = "Combine predicted and measured LPA values for validation analysis"
   ),
-
-  # Combine predicted and measured values
 
   tar_target(
     lpa_validation_df,
@@ -160,7 +157,7 @@ list(
   ),
 
 
-  # Demographics table overall with improved error handling
+  # Demographics Tables ----------------------------------------------------
   tar_target(
     lpa_demographics_overall,
     {
@@ -296,7 +293,7 @@ list(
     description = "Generate demographics table for the overall study population with robust error handling"
   ),
 
-  # Save demographics table overall - HTML
+  ## Save Demographics Tables -----------------------------------------------
   tar_file(
     lpa_demographics_overall_html,
     {
@@ -307,7 +304,6 @@ list(
     description = "Save overall demographics table to HTML file"
   ),
 
-  # Save demographics table overall - CSV
   tar_file(
     lpa_demographics_overall_csv,
     {
@@ -319,7 +315,7 @@ list(
   ),
 
 
-  # Demographics table by ancestry with improved error handling
+  ## Demographics By Ancestry -----------------------------------------------
   tar_target(
     lpa_demographics_by_ancestry,
     {
@@ -503,7 +499,7 @@ list(
     description = "Generate demographics table stratified by genetic ancestry with robust error handling"
   ),
 
-  # Save demographics table by ancestry - HTML
+  ## Save Ancestry Demographics ---------------------------------------------
   tar_file(
     lpa_demographics_by_ancestry_html,
     {
@@ -514,7 +510,6 @@ list(
     description = "Save ancestry-stratified demographics table to HTML file"
   ),
 
-  # Save demographics table by ancestry - CSV (wide format)
   tar_file(
     lpa_demographics_by_ancestry_csv,
     {
@@ -525,7 +520,6 @@ list(
     description = "Save ancestry-stratified demographics table to CSV file (wide format)"
   ),
 
-  # Save demographics table by ancestry - CSV (tidy/long format)
   tar_file(
     lpa_demographics_by_ancestry_tidy_csv,
     {
@@ -537,7 +531,7 @@ list(
   ),
 
 
-  # Prepare ancestry ordering and colors
+  # Visualization Setup ----------------------------------------------------
   tar_target(
     ancestry_order,
     {
@@ -561,7 +555,6 @@ list(
     description = "Determine ordering of genetic ancestry groups for plots (by sample size, with 'Other' last)"
   ),
 
-  # Validate GIA column and prepare standard color palette
   tar_target(
     standard_ancestry_palette,
     {
@@ -597,7 +590,7 @@ list(
     description = "Create standardized color palette for genetic ancestry groups"
   ),
 
-  # Validation plot (predicted vs measured)
+  # Validation Plots -------------------------------------------------------
   tar_target(
     plot_validation,
     {
@@ -651,7 +644,7 @@ list(
     description = "Generate validation plot comparing predicted vs measured LPA values"
   ),
 
-  # Save plot files (QS versions are needed for programmatic access)
+  ## Save Validation Plots --------------------------------------------------
   tar_file(
     plot_validation_overall_qs,
     {
@@ -689,7 +682,7 @@ list(
     description = "Save combined validation plot as qs file for programmatic manipulation"
   ),
 
-  # Distribution plots
+  ## Distribution Plots -----------------------------------------------------
   tar_target(
     plot_distribution,
     {
@@ -754,7 +747,7 @@ list(
     description = "Generate distribution plot of predicted and measured LPA values"
   ),
 
-  # Save plot files (QS versions are needed for programmatic access)
+  ## Save Distribution Plots ------------------------------------------------
   tar_file(
     plot_distribution_overall_qs,
     {
@@ -792,7 +785,7 @@ list(
     description = "Save distribution plot as qs file for programmatic manipulation"
   ),
 
-  # Comparison plot (boxplot by ancestry)
+  ## Comparison Plot --------------------------------------------------------
   tar_target(
     plot_comparison,
     {
@@ -816,7 +809,7 @@ list(
     description = "Generate comparison plot showing LPA values by genetic ancestry"
   ),
 
-  # Save comparison plot
+  ## Save Comparison Plot ---------------------------------------------------
   tar_file(
     plot_comparison_pdf,
     {
@@ -836,7 +829,7 @@ list(
     description = "Save comparison plot as qs file for programmatic manipulation"
   ),
 
-  # Bootstrap performance evaluation
+  # Bootstrap Configuration ------------------------------------------------
   tar_target(
     bootstrap_config,
     {
@@ -849,7 +842,7 @@ list(
     description = "Configure bootstrap parameters for performance evaluation"
   ),
 
-  # Define metric sets
+  ## Metrics Setup ----------------------------------------------------------
   tar_target(
     numeric_metrics,
     yardstick::metric_set(yardstick::rsq, yardstick::mape, yardstick::rmse),
@@ -861,7 +854,7 @@ list(
     description = "Define classification metrics for performance evaluation (sensitivity, specificity, etc.)"
   ),
 
-  # Bootstrap for numeric metrics
+  ## Numeric Metrics --------------------------------------------------------
   tar_target(
     lpa_numeric_boot,
     {
@@ -875,7 +868,6 @@ list(
     description = "Create bootstrap samples for numeric metrics evaluation"
   ),
 
-  # Numeric metrics by ancestry group with bootstrap
   tar_target(
     lpa_numeric_metrics_grouped_ci,
     {
@@ -919,7 +911,6 @@ list(
     description = "Calculate numeric metrics by ancestry group with bootstrap confidence intervals"
   ),
 
-  # Save numeric metrics by group - CSV only
   tar_file(
     lpa_numeric_metrics_grouped_ci_csv,
     {
@@ -931,7 +922,6 @@ list(
   ),
 
 
-  # Numeric metrics overall with bootstrap
   tar_target(
     lpa_numeric_metrics_overall_ci,
     {
@@ -976,7 +966,6 @@ list(
     description = "Calculate overall numeric metrics with bootstrap confidence intervals"
   ),
 
-  # Save numeric metrics overall - CSV only
   tar_file(
     lpa_numeric_metrics_overall_ci_csv,
     {
@@ -988,7 +977,7 @@ list(
   ),
 
 
-  # Create classification dataset
+  ## Classification Metrics -------------------------------------------------
   tar_target(
     lpa_class_df,
     {
@@ -1006,7 +995,6 @@ list(
     description = "Create classification dataset for multiple LPA thresholds"
   ),
 
-  # Bootstrap for classification metrics
   tar_target(
     lpa_class_boot,
     {
@@ -1019,7 +1007,6 @@ list(
     description = "Create bootstrap samples for classification metrics evaluation"
   ),
 
-  # Classification metrics by ancestry group
   tar_target(
     lpa_class_metrics_grouped_ci,
     {
@@ -1057,7 +1044,6 @@ list(
     description = "Calculate classification metrics by ancestry group with bootstrap confidence intervals"
   ),
 
-  # Save classification metrics by group - CSV only
   tar_file(
     lpa_class_metrics_grouped_ci_csv,
     {
@@ -1069,7 +1055,6 @@ list(
   ),
 
 
-  # Classification metrics overall
   tar_target(
     lpa_class_metrics_overall_ci,
     {
@@ -1109,7 +1094,6 @@ list(
     description = "Calculate overall classification metrics with bootstrap confidence intervals"
   ),
 
-  # Save classification metrics overall - CSV only
   tar_file(
     lpa_class_metrics_overall_ci_csv,
     {
@@ -1121,7 +1105,7 @@ list(
   ),
 
 
-  # Combine all metrics
+  ## Combined Metrics -------------------------------------------------------
   tar_target(
     lpa_boot_all_metrics,
     {
@@ -1139,7 +1123,6 @@ list(
     description = "Combine all performance metrics for reporting and visualization"
   ),
 
-  # Save combined metrics - CSV only
   tar_file(
     lpa_boot_all_metrics_csv,
     {
@@ -1151,7 +1134,7 @@ list(
   ),
 
 
-  # Group sizes for plotting
+  ## Group Size Calculations ------------------------------------------------
   tar_target(
     lpa_group_sizes,
     {
@@ -1168,7 +1151,7 @@ list(
     description = "Calculate sample sizes for each genetic ancestry group"
   ),
 
-  # Performance plots
+  ## Performance Plots ------------------------------------------------------
   tar_target(
     lpa_performance_plot,
     {
@@ -1241,7 +1224,7 @@ list(
     description = "Generate performance plots showing numeric and classification metrics"
   ),
 
-  # Save numeric performance plot
+  ## Save Performance Plots -------------------------------------------------
   tar_file(
     lpa_performance_plot_numeric_qs,
     {
@@ -1252,7 +1235,6 @@ list(
     description = "Save numeric performance plot as qs file for programmatic manipulation"
   ),
 
-  # Save classification performance plot
   tar_file(
     lpa_performance_plot_classification_qs,
     {
@@ -1263,7 +1245,6 @@ list(
     description = "Save classification performance plot as qs file for programmatic manipulation"
   ),
 
-  # Save combined performance plot
   tar_file(
     lpa_performance_plot_pdf,
     {
@@ -1283,7 +1264,7 @@ list(
     description = "Save performance plot as qs file for programmatic manipulation"
   ),
 
-  # Calculate NNT (Number Needed to Test)
+  ## NNT Calculations -------------------------------------------------------
   tar_target(
     lpa_nnt,
     {
@@ -1308,7 +1289,6 @@ list(
     description = "Calculate Number Needed to Test (NNT) from positive predictive value"
   ),
 
-  # Save NNT metrics - CSV only
   tar_file(
     lpa_nnt_csv,
     {
@@ -1320,7 +1300,7 @@ list(
   ),
 
 
-  # Plot NNT
+  ## NNT Plot ---------------------------------------------------------------
   tar_target(
     lpa_nnt_plot,
     {
@@ -1362,7 +1342,7 @@ list(
     description = "Generate NNT plot showing Number Needed to Test across genetic ancestry groups"
   ),
 
-  # Save NNT plot
+  ## Save NNT Plot ----------------------------------------------------------
   tar_file(
     lpa_nnt_plot_pdf,
     {
@@ -1382,7 +1362,7 @@ list(
     description = "Save NNT plot as qs file for programmatic manipulation"
   ),
 
-  # Simple prevalence analysis for LPA elevated values
+  # Prevalence Analysis ----------------------------------------------------
   tar_target(
     lpa_prevalence_table,
     {
@@ -1463,7 +1443,7 @@ list(
     }
   ),
 
-  # Save prevalence table to CSV
+  ## Save Prevalence Table --------------------------------------------------
   tar_file(
     lpa_prevalence_csv,
     {
@@ -1474,7 +1454,7 @@ list(
     description = "Save LPA prevalence table to CSV file"
   ),
 
-  # Calculate improvement factors
+  # Detection Improvement Analysis -----------------------------------------
   tar_target(
     lpa_detection_improvement,
     lpa_prevalence_table %>%
@@ -1524,7 +1504,7 @@ list(
       )
   ),
 
-  # Create simple table showing comparison at 150 nmol/L threshold
+  ## Comparison Table -------------------------------------------------------
   tar_target(
     lpa_detection_comparison_150,
     lpa_detection_improvement %>%
@@ -1570,7 +1550,6 @@ list(
       )
   ),
 
-  # Save comparison table at 150 nmol/L to CSV
   tar_file(
     lpa_detection_comparison_150_csv,
     {
@@ -1581,13 +1560,13 @@ list(
     description = "Save LPA detection comparison table at 150 nmol/L to CSV file"
   ),
 
-  # Generate comprehensive report using R Markdown
+  # Report Generation ------------------------------------------------------
   tar_render(
     name = lpa_validation_report,
     path = "rmarkdown/lpa_validation_report.Rmd"
   ),
 
-  # Update the zip_results target to use the R Markdown report
+  # Create ZIP Archive -----------------------------------------------------
   tar_file(
     zip_results,
     {
