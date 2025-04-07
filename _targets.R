@@ -115,7 +115,6 @@ list(
     },
     description = "Read measured LPA values and demographics from CSV file"
   ),
-
   tar_target(
     lpa_pred_summary,
     {
@@ -140,11 +139,10 @@ list(
     {
       # Join predicted and measured values
       lpa_pred_summary %>%
-        inner_join(lpa_measured, by = "ID")
+        left_join(lpa_measured, by = "ID")
     },
     description = "Combine predicted and measured LPA values for validation analysis"
   ),
-
   tar_target(
     lpa_validation_df,
     {
@@ -303,7 +301,6 @@ list(
     },
     description = "Save overall demographics table to HTML file"
   ),
-
   tar_file(
     lpa_demographics_overall_csv,
     {
@@ -509,7 +506,6 @@ list(
     },
     description = "Save ancestry-stratified demographics table to HTML file"
   ),
-
   tar_file(
     lpa_demographics_by_ancestry_csv,
     {
@@ -519,7 +515,6 @@ list(
     },
     description = "Save ancestry-stratified demographics table to CSV file (wide format)"
   ),
-
   tar_file(
     lpa_demographics_by_ancestry_tidy_csv,
     {
@@ -554,7 +549,6 @@ list(
     },
     description = "Determine ordering of genetic ancestry groups for plots (by sample size, with 'Other' last)"
   ),
-
   tar_target(
     standard_ancestry_palette,
     {
@@ -867,7 +861,6 @@ list(
     },
     description = "Create bootstrap samples for numeric metrics evaluation"
   ),
-
   tar_target(
     lpa_numeric_metrics_grouped_ci,
     {
@@ -910,7 +903,6 @@ list(
     },
     description = "Calculate numeric metrics by ancestry group with bootstrap confidence intervals"
   ),
-
   tar_file(
     lpa_numeric_metrics_grouped_ci_csv,
     {
@@ -920,8 +912,6 @@ list(
     },
     description = "Save numeric metrics by group to CSV file"
   ),
-
-
   tar_target(
     lpa_numeric_metrics_overall_ci,
     {
@@ -965,7 +955,6 @@ list(
     },
     description = "Calculate overall numeric metrics with bootstrap confidence intervals"
   ),
-
   tar_file(
     lpa_numeric_metrics_overall_ci_csv,
     {
@@ -994,7 +983,6 @@ list(
     },
     description = "Create classification dataset for multiple LPA thresholds"
   ),
-
   tar_target(
     lpa_class_boot,
     {
@@ -1006,7 +994,6 @@ list(
     },
     description = "Create bootstrap samples for classification metrics evaluation"
   ),
-
   tar_target(
     lpa_class_metrics_grouped_ci,
     {
@@ -1043,7 +1030,6 @@ list(
     },
     description = "Calculate classification metrics by ancestry group with bootstrap confidence intervals"
   ),
-
   tar_file(
     lpa_class_metrics_grouped_ci_csv,
     {
@@ -1053,8 +1039,6 @@ list(
     },
     description = "Save classification metrics by group to CSV file"
   ),
-
-
   tar_target(
     lpa_class_metrics_overall_ci,
     {
@@ -1093,7 +1077,6 @@ list(
     },
     description = "Calculate overall classification metrics with bootstrap confidence intervals"
   ),
-
   tar_file(
     lpa_class_metrics_overall_ci_csv,
     {
@@ -1122,7 +1105,6 @@ list(
     },
     description = "Combine all performance metrics for reporting and visualization"
   ),
-
   tar_file(
     lpa_boot_all_metrics_csv,
     {
@@ -1234,7 +1216,6 @@ list(
     },
     description = "Save numeric performance plot as qs file for programmatic manipulation"
   ),
-
   tar_file(
     lpa_performance_plot_classification_qs,
     {
@@ -1244,7 +1225,6 @@ list(
     },
     description = "Save classification performance plot as qs file for programmatic manipulation"
   ),
-
   tar_file(
     lpa_performance_plot_pdf,
     {
@@ -1288,7 +1268,6 @@ list(
     },
     description = "Calculate Number Needed to Test (NNT) from positive predictive value"
   ),
-
   tar_file(
     lpa_nnt_csv,
     {
@@ -1371,50 +1350,67 @@ list(
 
       # Use purrr::map_dfr to iterate over thresholds and bind results
       purrr::map_dfr(thresholds, function(current_threshold) {
-        # Overall rates first
-        overall_df <- lpa_validation_df %>%
+        # Overall rates first - using ALL genotyped individuals as denominator
+        overall_df <- lpa_pred_measured_df %>%
+          mutate(total_count = n()) %>%
           summarize(
-            total_count = n(),
-            # Measured LPA (clinical)
+            total_count = unique(total_count),
+            # Measured LPA (clinical) - using total genotyped as denominator
+            measured_available_count = sum(!is.na(lpa_nmol_max)),
             measured_elevated_count = sum(lpa_nmol_max > current_threshold, na.rm = TRUE),
-            measured_elevated_pct = mean(lpa_nmol_max > current_threshold, na.rm = TRUE) * 100,
-            # Predicted LPA (genetic)
+            measured_elevated_pct = measured_elevated_count / total_count * 100,
+
+            # Predicted LPA (genetic) - all genotyped individuals
+            predicted_available_count = sum(!is.na(lpa_pred_nm)),
             predicted_elevated_count = sum(lpa_pred_nm > current_threshold, na.rm = TRUE),
-            predicted_elevated_pct = mean(lpa_pred_nm > current_threshold, na.rm = TRUE) * 100
+            predicted_elevated_pct = predicted_elevated_count / total_count * 100
           ) %>%
-          # Join with PPV
+          # Join with PPV from validation statistics
           left_join(
             lpa_class_metrics_overall_ci %>%
               filter(.metric == "ppv", threshold == current_threshold, GIA == "Overall") %>%
               select(ppv = estimate),
             by = character()
           ) %>%
-          # Adjust prediction by PPV, handling NA values
+          # Adjust prediction by PPV when available
           mutate(
-            # Calculate both unadjusted and adjusted
+            # Calculate both unadjusted and adjusted values
             predicted_elevated_unadjusted = predicted_elevated_count,
             predicted_elevated_unadjusted_pct = predicted_elevated_count / total_count * 100,
+
             # Adjust by PPV only if PPV is available
-            predicted_elevated_adjusted = case_when(
-              !is.na(ppv) ~ predicted_elevated_count * ppv,
-              TRUE ~ predicted_elevated_count # If no PPV, use unadjusted as fallback
+            predicted_elevated_adjusted = if_else(!is.na(ppv),
+              predicted_elevated_count * ppv,
+              NA_real_
             ),
-            predicted_elevated_adjusted_pct = predicted_elevated_adjusted / total_count * 100,
+            predicted_elevated_adjusted_pct = if_else(!is.na(ppv),
+              predicted_elevated_adjusted / total_count * 100,
+              NA_real_
+            ),
             GIA = "Overall",
-            threshold = current_threshold
+            threshold = current_threshold,
+            has_ppv_adjustment = !is.na(ppv)
           )
 
         # Then by ancestry group
-        ancestry_df <- lpa_validation_df %>%
+        ancestry_df <- lpa_pred_measured_df %>%
+          # Include only individuals with known genetic ancestry
+          filter(!is.na(GIA)) %>%
+          add_count(GIA, name = "total_count") %>%
           group_by(GIA) %>%
           summarize(
-            total_count = n(),
-            # Measured LPA (clinical)
+            # Total genotyped individuals in each ancestry group
+            total_count = unique(total_count),
+
+            # Measured LPA (clinical) - using total genotyped in group as denominator
+            measured_available_count = sum(!is.na(lpa_nmol_max)),
             measured_elevated_count = sum(lpa_nmol_max > current_threshold, na.rm = TRUE),
-            measured_elevated_pct = mean(lpa_nmol_max > current_threshold, na.rm = TRUE) * 100,
+            measured_elevated_pct = measured_elevated_count / total_count * 100,
+
             # Predicted LPA (genetic)
+            predicted_available_count = sum(!is.na(lpa_pred_nm)),
             predicted_elevated_count = sum(lpa_pred_nm > current_threshold, na.rm = TRUE),
-            predicted_elevated_pct = mean(lpa_pred_nm > current_threshold, na.rm = TRUE) * 100
+            predicted_elevated_pct = predicted_elevated_count / total_count * 100
           ) %>%
           # Join with PPV values for each ancestry group
           left_join(
@@ -1423,24 +1419,30 @@ list(
               select(GIA, ppv = estimate),
             by = "GIA"
           ) %>%
-          # Adjust prediction by PPV, handling NA values
+          # Adjust prediction by PPV when available
           mutate(
-            # Calculate both unadjusted and adjusted
+            # Calculate both unadjusted and adjusted values
             predicted_elevated_unadjusted = predicted_elevated_count,
             predicted_elevated_unadjusted_pct = predicted_elevated_count / total_count * 100,
+
             # Adjust by PPV only if PPV is available
-            predicted_elevated_adjusted = case_when(
-              !is.na(ppv) ~ round(predicted_elevated_count * ppv),
-              TRUE ~ predicted_elevated_count # If no PPV, use unadjusted as fallback
+            predicted_elevated_adjusted = if_else(!is.na(ppv),
+              predicted_elevated_count * ppv,
+              NA_real_
             ),
-            predicted_elevated_adjusted_pct = predicted_elevated_adjusted / total_count * 100,
-            threshold = current_threshold
+            predicted_elevated_adjusted_pct = if_else(!is.na(ppv),
+              predicted_elevated_adjusted / total_count * 100,
+              NA_real_
+            ),
+            threshold = current_threshold,
+            has_ppv_adjustment = !is.na(ppv)
           )
 
         # Combine overall and ancestry-specific results
         bind_rows(overall_df, ancestry_df)
       })
-    }
+    },
+    description = "Calculate LPA prevalence using all genotyped individuals as denominator, with PPV adjustment when available"
   ),
 
   ## Save Prevalence Table --------------------------------------------------
@@ -1462,31 +1464,45 @@ list(
       mutate(
         # Clinical detection rate (per 1000)
         clinical_rate_per_1000 = measured_elevated_count / total_count * 1000,
-        # Genetic detection rates - both adjusted and unadjusted (per 1000)
-        genetic_rate_unadjusted_per_1000 = predicted_elevated_unadjusted / total_count * 1000,
-        genetic_rate_per_1000 = predicted_elevated_adjusted / total_count * 1000,
-        # Improvement factors - use both when relevant
-        improvement_factor_unadjusted = genetic_rate_unadjusted_per_1000 / clinical_rate_per_1000,
-        improvement_factor = genetic_rate_per_1000 / clinical_rate_per_1000,
-        # Flag whether PPV adjustment was available
-        has_ppv_adjustment = !is.na(ppv),
 
-        # Fisher's exact test for significance - use appropriate prediction count based on PPV availability
+        # Genetic detection rates (per 1000)
+        genetic_rate_unadjusted_per_1000 = predicted_elevated_unadjusted / total_count * 1000,
+        genetic_rate_per_1000 = if_else(!is.na(predicted_elevated_adjusted),
+          predicted_elevated_adjusted / total_count * 1000,
+          NA_real_
+        ),
+
+        # Improvement factors
+        improvement_factor_unadjusted = genetic_rate_unadjusted_per_1000 / clinical_rate_per_1000,
+        improvement_factor = if_else(!is.na(genetic_rate_per_1000),
+          genetic_rate_per_1000 / clinical_rate_per_1000,
+          NA_real_
+        ),
+
+        # Fisher's exact test for significance - use appropriate count based on PPV availability
         p_value = purrr::pmap_dbl(
           list(
-            predicted_count = predicted_elevated_adjusted,
+            predicted_count = if_else(has_ppv_adjustment,
+              as.numeric(predicted_elevated_adjusted),
+              as.numeric(predicted_elevated_unadjusted)
+            ),
             measured_count = measured_elevated_count,
-            n_total = total_count,
-            has_ppv = has_ppv_adjustment
+            n_total = total_count
           ),
-          function(predicted_count, measured_count, n_total, has_ppv) {
-            # Skip if either count is zero (to avoid errors)
-            if (predicted_count == 0 || measured_count == 0) return(NA_real_)
+          function(predicted_count, measured_count, n_total) {
+            # Skip if either count is zero or NA
+            if (is.na(predicted_count) || is.na(measured_count) ||
+              predicted_count == 0 || measured_count == 0) {
+              return(NA_real_)
+            }
 
-            # Create contingency table
+            # Create contingency table (rounded counts for Fisher's test)
+            predicted_count <- round(predicted_count)
             matrix <- matrix(
-              c(predicted_count, n_total - predicted_count,
-                measured_count, n_total - measured_count),
+              c(
+                predicted_count, n_total - predicted_count,
+                measured_count, n_total - measured_count
+              ),
               nrow = 2, byrow = TRUE
             )
 
@@ -1497,11 +1513,12 @@ list(
         ),
 
         # Add a note about which rate was used
-        rate_note = case_when(
-          has_ppv_adjustment ~ "PPV adjusted",
-          TRUE ~ "Unadjusted (no PPV available)"
+        rate_note = if_else(has_ppv_adjustment,
+          "PPV adjusted",
+          "Unadjusted (no PPV available)"
         )
-      )
+      ),
+    description = "Calculate detection improvement comparing genetic prediction to clinical measurements"
   ),
 
   ## Comparison Table -------------------------------------------------------
@@ -1509,11 +1526,21 @@ list(
     lpa_detection_comparison_150,
     lpa_detection_improvement %>%
       filter(threshold == 150) %>%
-      # Select appropriate columns, handling cases with/without PPV
+      # Choose appropriate columns based on PPV availability
       mutate(
-        # Choose which genetic count and percentage to use based on PPV availability
-        genetic_count = predicted_elevated_adjusted,
-        genetic_pct = predicted_elevated_adjusted_pct
+        # Use adjusted values when available, otherwise use unadjusted
+        genetic_count = if_else(!is.na(predicted_elevated_adjusted),
+          predicted_elevated_adjusted,
+          predicted_elevated_unadjusted
+        ),
+        genetic_pct = if_else(!is.na(predicted_elevated_adjusted_pct),
+          predicted_elevated_adjusted_pct,
+          predicted_elevated_unadjusted_pct
+        ),
+        improvement = if_else(!is.na(improvement_factor),
+          improvement_factor,
+          improvement_factor_unadjusted
+        )
       ) %>%
       select(
         GIA,
@@ -1522,7 +1549,7 @@ list(
         clinical_pct = measured_elevated_pct,
         genetic_count,
         genetic_pct,
-        improvement_factor,
+        improvement,
         p_value,
         rate_note
       ) %>%
@@ -1535,10 +1562,10 @@ list(
       mutate(
         clinical_pct = sprintf("%.1f%%", clinical_pct),
         genetic_pct = sprintf("%.1f%%", genetic_pct),
-        improvement_factor = case_when(
-          is.na(improvement_factor) ~ "NA",
-          is.infinite(improvement_factor) ~ "∞",
-          TRUE ~ sprintf("%.2fx", improvement_factor)
+        improvement = case_when(
+          is.na(improvement) ~ "NA",
+          is.infinite(improvement) ~ "∞",
+          TRUE ~ sprintf("%.2fx", improvement)
         ),
         p_value = case_when(
           is.na(p_value) ~ "NA",
@@ -1549,7 +1576,6 @@ list(
         )
       )
   ),
-
   tar_file(
     lpa_detection_comparison_150_csv,
     {
