@@ -8,14 +8,20 @@ The pipeline:
 1. Processes phased genotype data from VCF files
 2. Uses the `lpapredictr` package to predict LPA levels
 3. Compares predictions to measured LPA values
-4. Generates comprehensive validation statistics and visualizations
-5. Creates a detailed HTML report of results
+4. Generates validation statistics and visualizations
 
 ## Input File Requirements
 
+The pipeline requires two input files:
+1. `input/genotypes.vcf.gz` containing phased genotypes for the LPA gene region
+2. `input/measured.csv` containing measured LPA values and covariates
+
 ### 1. Genotype VCF File
 
-Place a phased VCF file at `input/genotypes.vcf.gz` containing genotypes for the LPA gene region.
+> [!IMPORTANT]  
+> This file should include the full genotyped biobank cohort
+
+Place a phased VCF file at `input/genotypes.vcf.gz` containing phased genotypes for the LPA gene region. 
 
 **Preparation Example using PLINK2:**
 ```bash
@@ -25,24 +31,38 @@ plink2 --pfile your_dataset --chr 6 --from-bp 159500000 --to-bp 161700000 \
 ```
 
 **Requirements:**
-- File must be phased and contain the LPA gene region
+- File must be phased and contain the LPA gene region; if you're using imputed genotype data, this should already be phased
 - Chromosome 6, approximately position 159.5-161.7 Mb (GRCh38)
 - File must be gzipped (.vcf.gz)
-- Sample IDs should match those in the measured file
+- Sample IDs should match those in the `input/measured.csv` file containing Lp(a) measurements and covariates. The `id-paste=iid` argument in the plink command above ensures the VCF sample ID is the IID from the plink file, rather than the default which combines FID and IID `FID_IID`)
 
-### 2. Measured LPA Values
+### 2. Measured LPA Values + Comorbidities
 
-Place a CSV file at `input/measured.csv` containing measured LPA values.
+> [!IMPORTANT]  
+> This file should include the full genotyped biobank cohort - the `lpa_nmol_max` column can be `NA` for samples without values
+
+> [!CAUTION]
+> Lp(a) levels may be measured in mg/dL or nmol/L. For this study, all measurements should be converted to nmol/L. For values measured in mg/dL, multiply by 2.15 to convert to nmol/L.
+
+Place a CSV file at `input/measured.csv` containing measured LPA values in nmol/L and covariates; convert from mg/dL by multiplying by 2.15. Prevalent clinical comorbidities can be derived from a standard dataframe of phecodes, or alternative local phenotype definitions if more readily available.
 
 **Required columns:**
 - `ID`: Sample identifiers matching the VCF file
-- `lpa_nmol_max`: Measured LPA values in nmol/L
-- `GIA`: Genetic ancestry group (e.g., "EUR", "AFR", "EAS", "CSA", "AMR", "MID", "Other")
+- `lpa_nmol_max`: Measured LPA values in nmol/L; this should be the maximum value if multiple measurements have been performed. Convert from mg/dL by multiplying by 2.15. Cells in this column will be empty for samples without values.
+- `GIA`: Genetic ancestry group (must be one of "EUR", "AFR", "EAS", "CSA", "AMR", "MID", "Other")
 
-**Optional columns (if available):**
-- `age`: Age in years
-- `sex`: Sex of participant
-- Comorbidities (binary 0/1): `IHD`, `HTN`, `HLD`, `HF`, `CKD`, `DM`, `AF`, `PVD`, `IS`
+**Covariate/demographic columns:**
+- `age` (numeric): Age at enrollment in years
+- `sex` (Male/Female/Other): Sex of participant
+- `IHD` (TRUE/FALSE): 2 or more instances of phecode `411` (Ischemic Heart Disease)
+- `HTN` (TRUE/FALSE): 2 or more instances of phecode `401` (Hypertension)
+- `HLD` (TRUE/FALSE): 2 or more instances of phecode `272.1` (Hyperlipidemia)
+- `HF` (TRUE/FALSE): 2 or more instances of phecode `428` (Heart Failure)
+- `CKD` (TRUE/FALSE): 2 or more instances of phecode `585.3` (Chronic Kidney Disease)
+- `DM` (TRUE/FALSE): 2 or more instances of phecode `250` (Diabetes Mellitus)
+- `AF` (TRUE/FALSE): 2 or more instances of phecode `427.2` (Atrial Fibrillation)
+- `PVD` (TRUE/FALSE): 2 or more instances of phecode `443` (Peripheral Vascular Disease)
+- `IS` (TRUE/FALSE): 2 or more instances of phecode `433.21` (Ischemic Stroke)
 
 **Example:**
 ```
