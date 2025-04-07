@@ -141,13 +141,7 @@ list(
 
       # Join predicted and measured values
       lpa_pred_summary %>%
-        inner_join(lpa_measured, by = "ID") %>%
-        # Add count by genetic ancestry group
-        group_by(GIA) %>%
-        mutate(n = n()) %>%
-        ungroup() %>%
-        # Keep only groups with enough samples
-        filter(n >= 20)
+        inner_join(lpa_measured, by = "ID")
     },
     description = "Combine predicted and measured LPA values for validation analysis"
   ),
@@ -158,7 +152,9 @@ list(
     lpa_validation_df,
     {
       lpa_pred_measured_df %>%
-        filter(!is.na(lpa_pred_nm) & !is.na(lpa_nmol_max))
+        filter(!is.na(lpa_pred_nm) & !is.na(lpa_nmol_max)) %>%
+        add_count(GIA) %>%
+        filter(n > 20)
     },
     description = "Filter combined dataset to individuals with both measured and predicted values"
   ),
