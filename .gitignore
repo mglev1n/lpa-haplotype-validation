@@ -10,3 +10,4 @@ Results/
 input/genotypes.vcf.gz
 input/measured.csv
 rmarkdown/lpa_validation_report.html
+containers/
