@@ -26,34 +26,114 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install renv
-RUN R -e 'install.packages("renv")'
+# Install renv and required packages
+RUN R -e "install.packages('renv', repos = c(CRAN = 'https://cloud.r-project.org'))"
 
-# Copy renv lockfile
-COPY renv.lock /app/
+# Copy renv lockfile to a temporary location
+COPY renv.lock /tmp/renv.lock
 
-# Tell renv to use a specific library path
-ENV RENV_PATHS_LIBRARY=/app/renv/library
+# Pre-install all packages during build time
+RUN mkdir -p /opt/lpa-pipeline && \
+    cd /opt/lpa-pipeline && \
+    cp /tmp/renv.lock renv.lock && \
+    R -e "Sys.setenv(GITHUB_PAT=Sys.getenv('GITHUB_PAT')); \
+         renv::restore(library='/opt/R-packages')"
 
-# Initialize renv and restore packages from lockfile
-# Use the provided GitHub PAT to access private repositories
-RUN cd /app && \
-    R -e 'Sys.setenv(GITHUB_PAT=Sys.getenv("GITHUB_PAT")); renv::init(); renv::restore()'
+# Set the R library path to use our pre-installed packages
+ENV R_LIBS_USER=/opt/R-packages
 
-# Create directories
-RUN mkdir -p /app/input /app/Results /app/rmarkdown
+# Copy project files to the package directory
+COPY _targets.R /opt/lpa-pipeline/
+COPY rmarkdown/*.Rmd /opt/lpa-pipeline/rmarkdown/
+COPY rmarkdown/*.yaml /opt/lpa-pipeline/rmarkdown/
 
-# Copy project files
-COPY _targets.R /app/
-COPY rmarkdown/*.Rmd /app/rmarkdown/
-COPY rmarkdown/*.yaml /app/rmarkdown/
-COPY entrypoint.sh /app/
+# Create an entrypoint script that runs in the current directory
+RUN echo '#!/bin/bash \n\
+set -e \n\
+\n\
+# Print welcome message \n\
+echo "======================================================" \n\
+echo "  LPA Prediction Validation Pipeline                  " \n\
+echo "======================================================" \n\
+echo "" \n\
+\n\
+# Detect if running in Singularity/Apptainer \n\
+RUNNING_IN_SINGULARITY=0 \n\
+if [ -e "/.singularity.d" ] || [ -e "/.apptainer.d" ] || [ -d "/singularity" ]; then \n\
+  RUNNING_IN_SINGULARITY=1 \n\
+  echo "Detected Singularity/Apptainer environment" \n\
+fi \n\
+\n\
+# Check for required directories and files \n\
+if [ ! -d "input" ]; then \n\
+  echo "ERROR: Required directory not found: ./input" \n\
+  echo "Please create the input directory in your current working directory" \n\
+  exit 1 \n\
+fi \n\
+\n\
+if [ ! -f "input/genotypes.vcf.gz" ]; then \n\
+  echo "ERROR: Required input file not found: ./input/genotypes.vcf.gz" \n\
+  echo "Please place your VCF file in the input directory" \n\
+  exit 1 \n\
+fi \n\
+\n\
+if [ ! -f "input/measured.csv" ]; then \n\
+  echo "ERROR: Required input file not found: ./input/measured.csv" \n\
+  echo "Please place your CSV file in the input directory" \n\
+  exit 1 \n\
+fi \n\
+\n\
+# Create required directories if they don'\''t exist \n\
+mkdir -p Results _targets \n\
+\n\
+echo "Found required input files:" \n\
+echo "- ./input/genotypes.vcf.gz" \n\
+echo "- ./input/measured.csv" \n\
+echo "" \n\
+\n\
+# Copy the targets script to current directory for execution \n\
+cp /opt/lpa-pipeline/_targets.R ./ \n\
+mkdir -p rmarkdown \n\
+cp /opt/lpa-pipeline/rmarkdown/* ./rmarkdown/ \n\
+\n\
+# Run the pipeline \n\
+echo "Starting LPA prediction validation pipeline..." \n\
+echo "This may take some time depending on your dataset size." \n\
+echo "" \n\
+\n\
+# When running in Singularity, handle renv differently \n\
+if [ $RUNNING_IN_SINGULARITY -eq 1 ]; then \n\
+  # Skip renv initialization in subprocesses by passing --vanilla to callr \n\
+  R --vanilla -e "library(tidyverse); library(targets); library(tarchetypes); \n\
+    library(lpapredictr); library(qs); library(gt); library(crew); \n\
+    library(tidymodels); library(patchwork); library(vroom); library(ggsci); \n\
+    tar_make(callr_arguments = list(cmdargs = c(\"--slave\", \"--no-save\", \"--no-restore\", \"--vanilla\")))" \n\
+else \n\
+  # In Docker, also skip renv since we pre-installed everything \n\
+  R -e "library(tidyverse); library(targets); library(tarchetypes); \n\
+    library(lpapredictr); library(qs); library(gt); library(crew); \n\
+    library(tidymodels); library(patchwork); library(vroom); library(ggsci); \n\
+    tar_make()" \n\
+fi \n\
+\n\
+# Check if report was generated \n\
+if [ -f "Results/lpa_validation_report.html" ]; then \n\
+  echo "Validation report generated successfully." \n\
+  echo "You can find all results in the Results directory." \n\
+else \n\
+  echo "WARNING: Pipeline completed but report was not generated." \n\
+  echo "Check the Results directory for any output files and error messages." \n\
+fi \n\
+\n\
+echo "" \n\
+echo "======================================================" \n\
+echo "  Pipeline execution finished                         " \n\
+echo "======================================================" \n\
+' > /usr/local/bin/run-lpa-pipeline.sh && \
+chmod +x /usr/local/bin/run-lpa-pipeline.sh
 
-# Make the entrypoint script executable
-RUN chmod +x /app/entrypoint.sh
-
-# Set working directory
-WORKDIR /app
+# Set the working directory to /work which will be bound to the user's current directory
+WORKDIR /work
 
 # Set the entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/run-lpa-pipeline.sh"]
