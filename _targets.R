@@ -1592,34 +1592,34 @@ list(
     path = "rmarkdown/lpa_validation_report.Rmd"
   ),
 
-  # Create ZIP Archive -----------------------------------------------------
-  tar_file(
-    zip_results,
-    {
-      # Zip the Results directory and report
-      zip_file <- "lpa_validation_results.zip"
-
-      # Ensure the report is included in the zip
-      report_file <- lpa_validation_report
-      file.copy(report_file[1], "Results/lpa_validation_report.html", overwrite = TRUE)
-
-      # Check if zip is available; if not, use alternative method
-      if (requireNamespace("zip", quietly = TRUE)) {
-        zip::zip(
-          zipfile = zip_file,
-          files = list.files("Results", full.names = TRUE),
-          recurse = TRUE,
-          compression_level = 9
-        )
-      } else {
-        utils::zip(
-          zipfile = zip_file,
-          files = list.files("Results", full.names = TRUE)
-        )
-      }
-
-      zip_file
-    },
-    description = "Create ZIP archive of all results including comprehensive report for easy sharing"
-  )
+  # # Create ZIP Archive -----------------------------------------------------
+  # tar_file(
+  #   zip_results,
+  #   {
+  #     # Zip the Results directory and report
+  #     zip_file <- "lpa_validation_results.zip"
+  #
+  #     # Ensure the report is included in the zip
+  #     report_file <- lpa_validation_report
+  #     file.copy(report_file[1], "Results/lpa_validation_report.html", overwrite = TRUE)
+  #
+  #     # Check if zip is available; if not, use alternative method
+  #     if (requireNamespace("zip", quietly = TRUE)) {
+  #       zip::zip(
+  #         zipfile = zip_file,
+  #         files = list.files("Results", full.names = TRUE),
+  #         recurse = TRUE,
+  #         compression_level = 9
+  #       )
+  #     } else {
+  #       utils::zip(
+  #         zipfile = zip_file,
+  #         files = list.files("Results", full.names = TRUE)
+  #       )
+  #     }
+  #
+  #     zip_file
+  #   },
+  #   description = "Create ZIP archive of all results including comprehensive report for easy sharing"
+  # )
 )
