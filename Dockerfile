@@ -32,6 +32,9 @@ RUN R -e 'install.packages("renv")'
 # Copy renv lockfile
 COPY renv.lock /app/
 
+# Tell renv to use a specific library path
+ENV RENV_PATHS_LIBRARY=/app/renv/library
+
 # Initialize renv and restore packages from lockfile
 # Use the provided GitHub PAT to access private repositories
 RUN cd /app && \
