@@ -101,20 +101,7 @@ echo "Starting LPA prediction validation pipeline..." \n\
 echo "This may take some time depending on your dataset size." \n\
 echo "" \n\
 \n\
-# When running in Singularity, handle renv differently \n\
-if [ $RUNNING_IN_SINGULARITY -eq 1 ]; then \n\
-  # Skip renv initialization in subprocesses by passing --vanilla to callr \n\
-  R --vanilla -e "library(tidyverse); library(targets); library(tarchetypes); \n\
-    library(lpapredictr); library(qs); library(gt); library(crew); \n\
-    library(tidymodels); library(patchwork); library(vroom); library(ggsci); \n\
-    tar_make(callr_arguments = list(cmdargs = c(\"--slave\", \"--no-save\", \"--no-restore\", \"--vanilla\")))" \n\
-else \n\
-  # In Docker, also skip renv since we pre-installed everything \n\
-  R -e "library(tidyverse); library(targets); library(tarchetypes); \n\
-    library(lpapredictr); library(qs); library(gt); library(crew); \n\
-    library(tidymodels); library(patchwork); library(vroom); library(ggsci); \n\
-    tar_make()" \n\
-fi \n\
+  R --vanilla -e "targets::tar_make(callr_arguments = list(cmdargs = c(\"--slave\", \"--no-save\", \"--no-restore\", \"--vanilla\")))" \n\
 \n\
 # Check if report was generated \n\
 if [ -f "Results/lpa_validation_report.html" ]; then \n\

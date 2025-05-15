@@ -34,7 +34,7 @@ plink2 --pfile your_dataset --chr 6 --from-bp 159500000 --to-bp 161700000 \
 - File must be phased and contain the LPA gene region; if you're using imputed genotype data, this should already be phased
 - Chromosome 6, approximately position 159.5-161.7 Mb (GRCh38)
 - File must be gzipped (.vcf.gz)
-- Sample IDs should match those in the `input/measured.csv` file containing Lp(a) measurements and covariates. The `id-paste=iid` argument in the plink command above ensures the VCF sample ID is the IID from the plink file, rather than the default which combines FID and IID `FID_IID`)
+- Sample IDs should match those in the `input/measured.csv` file containing Lp(a) measurements and covariates.
 
 ### 2. Measured LPA Values + Comorbidities
 
@@ -74,39 +74,50 @@ Sample2,34.2,AFR,63,M
 
 ## Running the Pipeline
 
-There are two options for running the pipeline:
+There are three options for running the pipeline:
 
-### Option 1: Using Docker (Recommended)
+### Option 1: Running with Singularity/Apptainer (Recommended for HPC)
 
-1. Install Docker on your system: [https://docs.docker.com/get-docker/](https://docs.docker.com/get-docker/)
-
-2. Pull the Docker image:
+1. Prepare your directory structure:
    ```bash
-   docker pull ghcr.io/mglev1n/lpa-validation:latest
+   mkdir -p input
+   cp /path/to/your/genotypes.vcf.gz input/
+   cp /path/to/your/measured.csv input/
    ```
 
-3. Create a directory for your input and output:
+2. Run the container in the current directory:
    ```bash
-   mkdir -p ~/lpa-validation/input ~/lpa-validation/Results
+   singularity run --pwd /work -B $(pwd):/work lpa-validation_latest.sif
    ```
 
-4. Place your input files in the input directory:
+   All results will be written to the `Results` directory in your current working directory.
+
+3. For HPC environments:
    ```bash
-   cp your_genotypes.vcf.gz ~/lpa-validation/input/genotypes.vcf.gz
-   cp your_measured.csv ~/lpa-validation/input/measured.csv
+   # Go to your project directory
+   cd /project/path/lpa-validation
+   
+   # Create input directory and add files
+   mkdir -p input
+   cp /path/to/your/genotypes.vcf.gz input/
+   cp /path/to/your/measured.csv input/
+   
+   # Run with Singularity/Apptainer
+   singularity run --pwd /work -B $(pwd):/work /path/to/lpa-validation_latest.sif
    ```
 
-5. Run the container:
+   If you encounter temp directory issues, add: `-B $(pwd)/tmp:/tmp`
+
+### Option 2: Using Docker
+
+1. Prepare your directory structure as above.
+
+2. Run the Docker container:
    ```bash
-   docker run --rm -v ~/lpa-validation:/data ghcr.io/mglev1n/lpa-validation:latest
+   docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:latest
    ```
 
-6. Check the Results directory for outputs:
-   ```bash
-   ls -la ~/lpa-validation/Results/
-   ```
-
-### Option 2: Running Locally from GitHub
+### Option 3: Running Locally from GitHub
 
 1. Clone the repository:
    ```bash
@@ -125,8 +136,6 @@ There are two options for running the pipeline:
    ```bash
    Rscript -e 'renv::restore()'
    ```
-
-   The `renv.lock` file ensures that exact package versions are used, maintaining reproducibility across different environments.
 
 5. Place your input files:
    ```bash
@@ -158,7 +167,9 @@ The pipeline generates various outputs in the `Results/` directory:
 
 - **Input validation error**: Check that your input files match the required format
 - **Missing dependencies**: If running locally, ensure `renv::restore()` completed successfully
-- **Memory issues**: Docker may need additional memory allocation for large datasets
+- **Memory issues**: For large datasets, ensure adequate memory is available
+- **HPC issues**: For Singularity, make sure your current directory is writable
+- **Temp directory issues**: Add `-B $(pwd)/tmp:/tmp` to your Singularity command
 
 ## License
 
