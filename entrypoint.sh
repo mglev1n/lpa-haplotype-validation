@@ -31,7 +31,7 @@ echo "This may take some time depending on your dataset size."
 echo ""
 
 cd /app
-R --vanilla -s -e 'targets::tar_make()'
+R --vanilla -e "targets::tar_make(callr_arguments = list(cmdargs = c('--slave', '--no-save', '--no-restore', '--vanilla')))"
 
 echo ""
 echo "Pipeline execution complete."
