@@ -1590,7 +1590,7 @@ list(
   tar_render(
     name = lpa_validation_report,
     path = "rmarkdown/lpa_validation_report.Rmd"
-  ),
+  )
 
   # # Create ZIP Archive -----------------------------------------------------
   # tar_file(
