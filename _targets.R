@@ -139,7 +139,8 @@ list(
     {
       # Join predicted and measured values
       lpa_pred_summary %>%
-        left_join(lpa_measured, by = "ID")
+        left_join(lpa_measured, by = "ID") %>%
+        select(-ID)
     },
     description = "Combine predicted and measured LPA values for validation analysis"
   ),
@@ -876,6 +877,7 @@ list(
           group_by(GIA, .metric) %>%
           summarize(
             estimate = mean(.estimate),
+            sd = sd(.estimate),
             lower_ci = quantile(.estimate, 0.025, na.rm = TRUE),
             upper_ci = quantile(.estimate, 0.975, na.rm = TRUE),
             .groups = "drop"
@@ -926,6 +928,7 @@ list(
           group_by(.metric) %>%
           summarize(
             estimate = mean(.estimate),
+            sd = sd(.estimate),
             lower_ci = quantile(.estimate, 0.025, na.rm = TRUE),
             upper_ci = quantile(.estimate, 0.975, na.rm = TRUE),
             .groups = "drop"
@@ -1009,6 +1012,7 @@ list(
           group_by(GIA, threshold, .metric) %>%
           summarize(
             estimate = mean(.estimate),
+            sd = sd(.estimate),
             lower_ci = quantile(.estimate, 0.025, na.rm = TRUE),
             upper_ci = quantile(.estimate, 0.975, na.rm = TRUE),
             .groups = "drop"
@@ -1054,6 +1058,7 @@ list(
           group_by(threshold, .metric) %>%
           summarize(
             estimate = mean(.estimate),
+            sd = sd(.estimate),
             lower_ci = quantile(.estimate, 0.025, na.rm = TRUE),
             upper_ci = quantile(.estimate, 0.975, na.rm = TRUE),
             .groups = "drop"
