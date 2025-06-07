@@ -26,6 +26,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Install bcftools from source + shapeit5 from github
+RUN git clone --recurse-submodules https://github.com/samtools/htslib.git /tmp/htslib \
+    && git clone https://github.com/samtools/bcftools.git /tmp/bcftools \
+    && cd /tmp/bcftools \
+    && make \
+    && make install \
+    && cd / \
+    && rm -rf /tmp/htslib /tmp/bcftools \
+    # Download and install phase_common_static
+    && wget -O /usr/local/bin/phase_common_static https://github.com/odelaneau/shapeit5/releases/download/v5.1.1/phase_common_static \
+    && chmod +x /usr/local/bin/phase_common_static
+
 # Install renv and required packages
 RUN R -e "install.packages('renv', repos = c(CRAN = 'https://cloud.r-project.org'))"
 
