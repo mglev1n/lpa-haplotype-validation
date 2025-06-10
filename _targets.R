@@ -104,7 +104,7 @@ list(
                      "-i", vcf_file,
                      "-o", "input",
                      "-x", "Resources/Lpa_hap_model.flank100.sites.vcf.gz",
-                     "-r", "Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz",
+                     "-r", "Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.157000000-163000000.vcf.gz",
                      "-m", "Resources/chr6.b38.gmap.gz",
                      "-s", "/usr/local/bin/phase_common_static"
                    ),
