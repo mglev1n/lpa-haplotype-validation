@@ -11,3 +11,5 @@ input/genotypes.vcf.gz
 input/measured.csv
 rmarkdown/lpa_validation_report.html
 containers/
+Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz
+Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz.tbi
