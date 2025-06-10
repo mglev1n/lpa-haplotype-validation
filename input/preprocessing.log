@@ -1,0 +1,10 @@
+[0;32m[2025-06-10 15:43:36][0m Starting LPA genotype preprocessing pipeline
+[0;32m[2025-06-10 15:43:36][0m Input: input/genotypes.vcf.gz
+[0;32m[2025-06-10 15:43:36][0m Output directory: input
+[0;32m[2025-06-10 15:43:36][0m Model sites: Resources/Lpa_hap_model.flank100.sites.vcf.gz
+[0;32m[2025-06-10 15:43:36][0m Creating index for input VCF/BCF file...
+[0;32m[2025-06-10 15:44:14][0m Starting LPA genotype preprocessing pipeline
+[0;32m[2025-06-10 15:44:14][0m Input: input/genotypes.vcf.gz
+[0;32m[2025-06-10 15:44:14][0m Output directory: input
+[0;32m[2025-06-10 15:44:14][0m Model sites: Resources/Lpa_hap_model.flank100.sites.vcf.gz
+[0;32m[2025-06-10 15:44:14][0m Creating index for input VCF/BCF file...

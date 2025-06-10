@@ -27,6 +27,7 @@ Place a phased VCF file at `input/genotypes.vcf.gz` containing phased genotypes 
 ```bash
 plink2 --pfile your_dataset --chr 6 --from-bp 159500000 --to-bp 161700000 \
   --export vcf bgz id-paste=iid vcf-dosage='HDS' \
+  --output-chr chr26 \
   --out input/genotypes
 ```
 

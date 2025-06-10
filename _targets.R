@@ -94,12 +94,31 @@ list(
     description = "Validate that input files exist and have the required format"
   ),
 
+  # VCF File Processing ----------------------------------------------------
+
+  tar_file(genotypes_clean,
+   {
+     # Run lpa_processing.sh to impute missing variants + extract model-relevant SNPs
+     processx::run("Scripts/lpa_processing.sh",
+                   args = c(
+                     "-i", vcf_file,
+                     "-o", "input",
+                     "-x", "Resources/Lpa_hap_model.flank100.sites.vcf.gz",
+                     "-r", "Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz",
+                     "-m", "Resources/chr6.b38.gmap.gz",
+                     "-s", "/usr/local/bin/phase_common_static"
+                   ),
+                   echo = TRUE )
+   },
+   description = "Process VCF file to impute missing variants and extract relevant SNPs"
+  ),
+
   # LPA Prediction ---------------------------------------------------------
   tar_target(
     lpa_predictions,
     {
       # Use lpapredictr package to predict LPA levels
-      predictions <- lpapredictr::predict_lpa(vcf_file = vcf_file)
+      predictions <- lpapredictr::predict_lpa(vcf_file = genotypes_clean)
       predictions
     },
     description = "Run LPA prediction on phased genotypes from VCF file"
@@ -1385,12 +1404,12 @@ list(
 
             # Adjust by PPV only if PPV is available
             predicted_elevated_adjusted = if_else(!is.na(ppv),
-              predicted_elevated_count * ppv,
-              NA_real_
+                                                  predicted_elevated_count * ppv,
+                                                  NA_real_
             ),
             predicted_elevated_adjusted_pct = if_else(!is.na(ppv),
-              predicted_elevated_adjusted / total_count * 100,
-              NA_real_
+                                                      predicted_elevated_adjusted / total_count * 100,
+                                                      NA_real_
             ),
             GIA = "Overall",
             threshold = current_threshold,
@@ -1432,12 +1451,12 @@ list(
 
             # Adjust by PPV only if PPV is available
             predicted_elevated_adjusted = if_else(!is.na(ppv),
-              predicted_elevated_count * ppv,
-              NA_real_
+                                                  predicted_elevated_count * ppv,
+                                                  NA_real_
             ),
             predicted_elevated_adjusted_pct = if_else(!is.na(ppv),
-              predicted_elevated_adjusted / total_count * 100,
-              NA_real_
+                                                      predicted_elevated_adjusted / total_count * 100,
+                                                      NA_real_
             ),
             threshold = current_threshold,
             has_ppv_adjustment = !is.na(ppv)
@@ -1473,23 +1492,23 @@ list(
         # Genetic detection rates (per 1000)
         genetic_rate_unadjusted_per_1000 = predicted_elevated_unadjusted / total_count * 1000,
         genetic_rate_per_1000 = if_else(!is.na(predicted_elevated_adjusted),
-          predicted_elevated_adjusted / total_count * 1000,
-          NA_real_
+                                        predicted_elevated_adjusted / total_count * 1000,
+                                        NA_real_
         ),
 
         # Improvement factors
         improvement_factor_unadjusted = genetic_rate_unadjusted_per_1000 / clinical_rate_per_1000,
         improvement_factor = if_else(!is.na(genetic_rate_per_1000),
-          genetic_rate_per_1000 / clinical_rate_per_1000,
-          NA_real_
+                                     genetic_rate_per_1000 / clinical_rate_per_1000,
+                                     NA_real_
         ),
 
         # Fisher's exact test for significance - use appropriate count based on PPV availability
         p_value = purrr::pmap_dbl(
           list(
             predicted_count = if_else(has_ppv_adjustment,
-              as.numeric(predicted_elevated_adjusted),
-              as.numeric(predicted_elevated_unadjusted)
+                                      as.numeric(predicted_elevated_adjusted),
+                                      as.numeric(predicted_elevated_unadjusted)
             ),
             measured_count = measured_elevated_count,
             n_total = total_count
@@ -1497,7 +1516,7 @@ list(
           function(predicted_count, measured_count, n_total) {
             # Skip if either count is zero or NA
             if (is.na(predicted_count) || is.na(measured_count) ||
-              predicted_count == 0 || measured_count == 0) {
+                predicted_count == 0 || measured_count == 0) {
               return(NA_real_)
             }
 
@@ -1519,8 +1538,8 @@ list(
 
         # Add a note about which rate was used
         rate_note = if_else(has_ppv_adjustment,
-          "PPV adjusted",
-          "Unadjusted (no PPV available)"
+                            "PPV adjusted",
+                            "Unadjusted (no PPV available)"
         )
       ),
     description = "Calculate detection improvement comparing genetic prediction to clinical measurements"
@@ -1535,16 +1554,16 @@ list(
       mutate(
         # Use adjusted values when available, otherwise use unadjusted
         genetic_count = if_else(!is.na(predicted_elevated_adjusted),
-          predicted_elevated_adjusted,
-          predicted_elevated_unadjusted
+                                predicted_elevated_adjusted,
+                                predicted_elevated_unadjusted
         ),
         genetic_pct = if_else(!is.na(predicted_elevated_adjusted_pct),
-          predicted_elevated_adjusted_pct,
-          predicted_elevated_unadjusted_pct
+                              predicted_elevated_adjusted_pct,
+                              predicted_elevated_unadjusted_pct
         ),
         improvement = if_else(!is.na(improvement_factor),
-          improvement_factor,
-          improvement_factor_unadjusted
+                              improvement_factor,
+                              improvement_factor_unadjusted
         )
       ) %>%
       select(
