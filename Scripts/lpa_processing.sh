@@ -53,6 +53,7 @@ Optional arguments:
     --region             Target region (default: chr6:159500000-161700000)
     --extract-region     Extraction region (default: chr6:160400000-160800000)
     --temp-dir           Base directory for temporary files (default: current directory)
+                         Note: Temporary files will be created in a .temp subdirectory
     -h, --help           Display this help message
 
 Example:
@@ -98,6 +99,12 @@ cleanup_temp() {
     if [[ -n "${TEMP_DIR:-}" ]] && [[ -d "$TEMP_DIR" ]]; then
         log "Cleaning up temporary directory..."
         rm -rf "$TEMP_DIR"
+    fi
+
+    # Also clean up the .temp directory if it's empty
+    if [[ -n "${TEMP_BASE_DIR:-}" ]] && [[ -d "$TEMP_BASE_DIR/.temp" ]]; then
+        # Only remove if empty (will fail silently if not empty, which is fine)
+        rmdir "$TEMP_BASE_DIR/.temp" 2>/dev/null || true
     fi
 }
 
@@ -209,16 +216,33 @@ if [[ ! -w "$TEMP_BASE_DIR" ]]; then
     error "Temporary directory base is not writable: $TEMP_BASE_DIR"
 fi
 
-# Create unique temporary directory in the specified base directory
-TEMP_DIR=$(mktemp -d "$TEMP_BASE_DIR/lpa_preprocess.XXXXXX")
-if [[ ! -d "$TEMP_DIR" ]]; then
-    error "Failed to create temporary directory in $TEMP_BASE_DIR"
+# Create .temp subdirectory within the base directory
+TEMP_PARENT="$TEMP_BASE_DIR/.temp"
+mkdir -p "$TEMP_PARENT"
+
+if [[ ! -d "$TEMP_PARENT" ]]; then
+    error "Failed to create .temp directory in $TEMP_BASE_DIR"
 fi
 
+# Create unique temporary directory within the .temp directory
+TEMP_DIR=$(mktemp -d "$TEMP_PARENT/lpa_preprocess.XXXXXX")
+if [[ ! -d "$TEMP_DIR" ]]; then
+    error "Failed to create temporary directory in $TEMP_PARENT"
+fi
+
+# Set up comprehensive cleanup traps for various signals
+# This helps ensure cleanup even if the process is killed
 trap cleanup_temp EXIT
+trap cleanup_temp SIGTERM
+trap cleanup_temp SIGINT
+trap cleanup_temp SIGQUIT
 
 log "Using temporary directory: $TEMP_DIR"
 log "Using $THREADS threads for parallel processing"
+
+# Note: Create a file to mark this run in case cleanup is needed later
+echo "LPA processing started at $(date)" > "$TEMP_DIR/process_info.txt"
+echo "PID: $" >> "$TEMP_DIR/process_info.txt"
 
 # Set up file paths
 BASENAME=$(basename "$INPUT_VCF" | sed 's/\.[^.]*$//')
@@ -238,7 +262,7 @@ log "Input: $INPUT_VCF"
 log "Output directory: $OUTPUT_DIR"
 log "Model sites: $SITES_VCF"
 
-# Step 1: Index input VCF
+# Step 1: Check if input VCF is indexed
 log "Creating index for input VCF/BCF file..."
 bcftools index -f "$INPUT_VCF"
 
