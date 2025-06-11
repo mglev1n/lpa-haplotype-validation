@@ -419,14 +419,14 @@
     },
     "cli": {
       "Package": "cli",
-      "Version": "3.6.4",
+      "Version": "3.6.5",
       "Source": "Repository",
       "Repository": "RSPM",
       "Requirements": [
         "R",
         "utils"
       ],
-      "Hash": "491c34d3d9dd0d2fe13d9f278bb90795"
+      "Hash": "16850760556401a2eeb27d39bd11c9cb"
     },
     "clipr": {
       "Package": "clipr",
@@ -1444,13 +1444,13 @@
       "RemoteUsername": "mglev1n",
       "RemoteRepo": "lpapredictr",
       "RemoteRef": "main",
-      "RemoteSha": "0a01fbc76a61b31f14ec0a2827b25af88212ebdc",
+      "RemoteSha": "b3374a255c75c1129a326a26539a9a87608ef1b8",
       "Requirements": [
         "Rhtslib",
         "cli",
         "cpp11"
       ],
-      "Hash": "09103c6de03418e09beadf9aa746cbd8"
+      "Hash": "e2495f6b5a1552bd4634ac49abf16bb2"
     },
     "lubridate": {
       "Package": "lubridate",
