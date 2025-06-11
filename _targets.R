@@ -99,7 +99,7 @@ list(
   tar_file(genotypes_clean,
    {
      # Run lpa_processing.sh to impute missing variants + extract model-relevant SNPs
-     processx::run("Scripts/lpa_processing.sh",
+      cleaned_genotypes <- processx::run("Scripts/lpa_processing.sh",
                    args = c(
                      "-i", vcf_file,
                      "-o", "input",
@@ -109,6 +109,8 @@ list(
                      "-s", "/usr/local/bin/phase_common_static"
                    ),
                    echo = TRUE )
+
+      return(cleaned_genotypes$stdout)
    },
    description = "Process VCF file to impute missing variants and extract relevant SNPs"
   ),
