@@ -28,6 +28,7 @@ THREADS=$(get_available_threads)
 REGION="chr6:159500000-161700000"
 EXTRACTION_REGION="chr6:160400000-160800000"
 TEMP_BASE_DIR=""  # New variable for custom temp directory
+OUTPUT_FILENAME=""  # New variable for custom output filename
 
 # Color codes for output
 RED='\033[0;31m'
@@ -48,6 +49,7 @@ Required arguments:
     -m, --map            Genetic map file for chromosome 6
 
 Optional arguments:
+    -f, --output-file    Output filename (default: {input_basename}.processed.bcf)
     -t, --threads        Number of threads (default: auto-detect, currently $THREADS)
     -s, --shapeit5       Path to ShapeIt5 phase_common_static binary
     --region             Target region (default: chr6:159500000-161700000)
@@ -59,6 +61,9 @@ Optional arguments:
 Example:
     $0 -i input.vcf.gz -o /path/to/output -x model.sites.vcf.gz \\
        -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz
+
+    $0 -i input.vcf.gz -o /path/to/output -f custom_output.bcf \\
+       -x model.sites.vcf.gz -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz
 EOF
     exit 1
 }
@@ -120,6 +125,10 @@ while (( "$#" )); do
             OUTPUT_DIR=$2
             shift 2
             ;;
+        -f|--output-file)
+            OUTPUT_FILENAME=$2
+            shift 2
+            ;;
         -x|--sites)
             SITES_VCF=$2
             shift 2
@@ -176,6 +185,21 @@ fi
 [[ -z "${SITES_VCF:-}" ]] && error "Model sites VCF file is required (-x)"
 [[ -z "${REFERENCE_PANEL:-}" ]] && error "Reference panel is required (-r)"
 [[ -z "${GENETIC_MAP:-}" ]] && error "Genetic map is required (-m)"
+
+# Validate output filename if provided
+if [[ -n "$OUTPUT_FILENAME" ]]; then
+    # Check if filename has appropriate extension
+    if [[ ! "$OUTPUT_FILENAME" =~ \.(bcf|vcf|vcf\.gz)$ ]]; then
+        warn "Output filename '$OUTPUT_FILENAME' does not have a standard extension (.bcf, .vcf, or .vcf.gz)"
+        warn "Proceeding anyway, but you may want to use a standard extension"
+    fi
+
+    # Check if file already exists
+    if [[ -f "$OUTPUT_DIR/$OUTPUT_FILENAME" ]]; then
+        warn "Output file already exists: $OUTPUT_DIR/$OUTPUT_FILENAME"
+        warn "It will be overwritten"
+    fi
+fi
 
 # Check for required commands
 log "Checking required tools..."
@@ -249,7 +273,14 @@ BASENAME=$(basename "$INPUT_VCF" | sed 's/\.[^.]*$//')
 CHR_FIXED_VCF="$TEMP_DIR/${BASENAME}.chr6.bcf"
 EXTRACTED_BCF="$TEMP_DIR/${BASENAME}.extracted.bcf"
 IMPUTED_BCF="$TEMP_DIR/${BASENAME}.imputed.bcf"
-FINAL_BCF="$OUTPUT_DIR/${BASENAME}.processed.bcf"
+
+# Set output filename - use custom name if provided, otherwise use default
+if [[ -n "$OUTPUT_FILENAME" ]]; then
+    FINAL_BCF="$OUTPUT_DIR/$OUTPUT_FILENAME"
+else
+    FINAL_BCF="$OUTPUT_DIR/${BASENAME}.processed.bcf"
+fi
+
 CHR_RENAME_FILE="$TEMP_DIR/chr_rename.txt"
 LOG_FILE="$OUTPUT_DIR/preprocessing.log"
 
@@ -260,6 +291,7 @@ exec 2>&1
 log "Starting LPA genotype preprocessing pipeline"
 log "Input: $INPUT_VCF"
 log "Output directory: $OUTPUT_DIR"
+log "Output file: $FINAL_BCF"
 log "Model sites: $SITES_VCF"
 
 # Step 1: Check if input VCF is indexed
@@ -412,6 +444,7 @@ LPA Genotype Preprocessing Summary
 Date: $(date)
 Input: $INPUT_VCF
 Output: $FINAL_BCF
+Output filename: $(basename "$FINAL_BCF")
 Threads used: $THREADS
 Temporary directory: $TEMP_DIR
 

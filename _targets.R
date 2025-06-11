@@ -98,11 +98,15 @@ list(
 
   tar_file(genotypes_clean,
    {
+
+      output_file <- "genotypes_processed.bcf"
+      output_path <- file.path("input", output_file)
      # Run lpa_processing.sh to impute missing variants + extract model-relevant SNPs
-      cleaned_genotypes <- processx::run("Scripts/lpa_processing.sh",
+      processx::run("Scripts/lpa_processing.sh",
                    args = c(
                      "-i", vcf_file,
                      "-o", "input",
+                     "-f", "genotypes_processed.bcf",
                      "-x", "Resources/Lpa_hap_model.flank100.sites.vcf.gz",
                      "-r", "Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.157000000-163000000.vcf.gz",
                      "-m", "Resources/chr6.b38.gmap.gz",
@@ -110,7 +114,7 @@ list(
                    ),
                    echo = TRUE )
 
-      "input/genotypes.processed.bcf"
+      output_path
    },
    description = "Process VCF file to impute missing variants and extract relevant SNPs"
   ),
@@ -120,7 +124,7 @@ list(
     lpa_predictions,
     {
       # Use lpapredictr package to predict LPA levels
-      predictions <- lpapredictr::predict_lpa(vcf_file = genotypes_clean)
+      predictions <- lpapredictr::predict_lpa(genotypes_clean)
       predictions
     },
     description = "Run LPA prediction on phased genotypes from VCF file"
