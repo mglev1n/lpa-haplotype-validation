@@ -58,6 +58,8 @@ ENV R_LIBS_USER=/opt/R-packages
 COPY _targets.R /opt/lpa-pipeline/
 COPY rmarkdown/*.Rmd /opt/lpa-pipeline/rmarkdown/
 COPY rmarkdown/*.yaml /opt/lpa-pipeline/rmarkdown/
+COPY Scripts/ /opt/lpa-pipeline/Scripts/
+COPY Resources/ /opt/lpa-pipeline/Resources/
 
 # Create an entrypoint script that runs in the current directory
 RUN echo '#!/bin/bash \n\
@@ -105,8 +107,10 @@ echo "" \n\
 \n\
 # Copy the targets script to current directory for execution \n\
 cp /opt/lpa-pipeline/_targets.R ./ \n\
-mkdir -p rmarkdown \n\
+mkdir -p rmarkdown Scripts Resources \n\
 cp /opt/lpa-pipeline/rmarkdown/* ./rmarkdown/ \n\
+cp -r /opt/lpa-pipeline/Scripts/* ./Scripts/ \n\
+cp -r /opt/lpa-pipeline/Resources/* ./Resources/ \n\
 \n\
 # Run the pipeline \n\
 echo "Starting LPA prediction validation pipeline..." \n\

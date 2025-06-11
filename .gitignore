@@ -7,9 +7,8 @@ lpa_validation_results.zip
 lpa-haplotype-validation.Rproj
 Results/
 .Rprofile
-input/genotypes.vcf.gz
-input/measured.csv
+input/
 rmarkdown/lpa_validation_report.html
 containers/
 Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz
-Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz.tbi
+Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz
