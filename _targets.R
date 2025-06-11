@@ -97,20 +97,28 @@ list(
   # VCF File Processing ----------------------------------------------------
 
   tar_file(genotypes_clean,
-   {
-     # Run lpa_processing.sh to impute missing variants + extract model-relevant SNPs
-     processx::run("Scripts/lpa_processing.sh",
-                   args = c(
-                     "-i", vcf_file,
-                     "-o", "input",
-                     "-x", "Resources/Lpa_hap_model.flank100.sites.vcf.gz",
-                     "-r", "Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.157000000-163000000.vcf.gz",
-                     "-m", "Resources/chr6.b38.gmap.gz",
-                     "-s", "/usr/local/bin/phase_common_static"
-                   ),
-                   echo = TRUE )
-   },
-   description = "Process VCF file to impute missing variants and extract relevant SNPs"
+           {
+             # Define predictable output filename
+             output_file <- "genotypes_processed.bcf"
+             output_path <- file.path("input", output_file)
+
+             # Run lpa_processing.sh to impute missing variants + extract model-relevant SNPs
+             processx::run("Scripts/lpa_processing.sh",
+                           args = c(
+                             "-i", vcf_file,
+                             "-o", "input",
+                             "-f", output_file,  # Specify output filename
+                             "-x", "Resources/Lpa_hap_model.flank100.sites.vcf.gz",
+                             "-r", "Resources/ALL.chr6.shapeit2_integrated_v1a.GRCh38.20181129.phased.157000000-163000000.vcf.gz",
+                             "-m", "Resources/chr6.b38.gmap.gz",
+                             "-s", "/usr/local/bin/phase_common_static"
+                           ),
+                           echo = TRUE )
+
+             # Return the path to the processed file
+             output_path
+           },
+           description = "Process VCF file to impute missing variants and extract relevant SNPs"
   ),
 
   # LPA Prediction ---------------------------------------------------------
