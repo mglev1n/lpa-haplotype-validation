@@ -27,6 +27,7 @@ get_available_threads() {
 THREADS=$(get_available_threads)
 REGION="chr6:159500000-161700000"
 EXTRACTION_REGION="chr6:160400000-160800000"
+TEMP_BASE_DIR=""  # New variable for custom temp directory
 
 # Color codes for output
 RED='\033[0;31m'
@@ -51,6 +52,7 @@ Optional arguments:
     -s, --shapeit5       Path to ShapeIt5 phase_common_static binary
     --region             Target region (default: chr6:159500000-161700000)
     --extract-region     Extraction region (default: chr6:160400000-160800000)
+    --temp-dir           Base directory for temporary files (default: current directory)
     -h, --help           Display this help message
 
 Example:
@@ -139,6 +141,10 @@ while (( "$#" )); do
             EXTRACTION_REGION=$2
             shift 2
             ;;
+        --temp-dir)
+            TEMP_BASE_DIR=$2
+            shift 2
+            ;;
         -h|--help)
             usage
             ;;
@@ -189,7 +195,26 @@ check_file "$SHAPEIT5_BIN" "ShapeIt5 binary"
 mkdir -p "$OUTPUT_DIR"
 
 # Create temporary directory for intermediate files
-TEMP_DIR=$(mktemp -d -p "${TMPDIR:-/tmp}" lpa_preprocess.XXXXXX)
+# Use current directory if no temp base directory specified
+if [[ -z "$TEMP_BASE_DIR" ]]; then
+    TEMP_BASE_DIR="$(pwd)"
+fi
+
+# Ensure temp base directory exists and is writable
+if [[ ! -d "$TEMP_BASE_DIR" ]]; then
+    error "Temporary directory base does not exist: $TEMP_BASE_DIR"
+fi
+
+if [[ ! -w "$TEMP_BASE_DIR" ]]; then
+    error "Temporary directory base is not writable: $TEMP_BASE_DIR"
+fi
+
+# Create unique temporary directory in the specified base directory
+TEMP_DIR=$(mktemp -d "$TEMP_BASE_DIR/lpa_preprocess.XXXXXX")
+if [[ ! -d "$TEMP_DIR" ]]; then
+    error "Failed to create temporary directory in $TEMP_BASE_DIR"
+fi
+
 trap cleanup_temp EXIT
 
 log "Using temporary directory: $TEMP_DIR"
@@ -213,18 +238,9 @@ log "Input: $INPUT_VCF"
 log "Output directory: $OUTPUT_DIR"
 log "Model sites: $SITES_VCF"
 
-# Step 1: Check if input VCF is indexed
+# Step 1: Index input VCF
 log "Creating index for input VCF/BCF file..."
 bcftools index -f "$INPUT_VCF"
-
-# log "Checking VCF index..."
-# if [[ "$INPUT_VCF" =~ \.vcf\.gz$ ]] && [[ ! -f "${INPUT_VCF}.tbi" && ! -f "${INPUT_VCF}.csi" ]]; then
-#     log "Creating VCF index..."
-#     bcftools index -f "$INPUT_VCF"
-# elif [[ "$INPUT_VCF" =~ \.bcf$ ]] && [[ ! -f "${INPUT_VCF}.csi" ]]; then
-#     log "Creating BCF index..."
-#     bcftools index -f "$INPUT_VCF"
-# fi
 
 # Step 2: Determine chromosome naming convention
 log "Determining chromosome naming convention..."
@@ -373,6 +389,7 @@ Date: $(date)
 Input: $INPUT_VCF
 Output: $FINAL_BCF
 Threads used: $THREADS
+Temporary directory: $TEMP_DIR
 
 Original chromosome naming: $CHR
 Standardized to: chr6

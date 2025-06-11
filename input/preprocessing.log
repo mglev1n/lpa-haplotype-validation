@@ -21,3 +21,8 @@
 Failed to open Resources/Lpa_hap_model.flank100.sites.vcf.gz: could not load index
 Failed to read from standard input: unknown file type
 [0;32m[2025-06-10 16:38:44][0m Cleaning up temporary directory...
+[0;32m[2025-06-11 10:02:39][0m Starting LPA genotype preprocessing pipeline
+[0;32m[2025-06-11 10:02:39][0m Input: input/genotypes.vcf.gz
+[0;32m[2025-06-11 10:02:39][0m Output directory: input
+[0;32m[2025-06-11 10:02:39][0m Model sites: Resources/Lpa_hap_model.flank100.sites.vcf.gz
+[0;32m[2025-06-11 10:02:39][0m Creating index for input VCF/BCF file...
