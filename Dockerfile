@@ -2,7 +2,7 @@ FROM bioconductor/tidyverse:3.17
 
 LABEL maintainer="Michael Levin <michael.levin@pennmedicine.upenn.edu>"
 LABEL description="LPA Prediction Validation Pipeline"
-LABEL version="0.1.0"
+LABEL version="0.2.0"
 
 # Accept GitHub PAT as build argument
 ARG GITHUB_PAT
@@ -61,79 +61,14 @@ COPY rmarkdown/*.yaml /opt/lpa-pipeline/rmarkdown/
 COPY Scripts/ /opt/lpa-pipeline/Scripts/
 COPY Resources/ /opt/lpa-pipeline/Resources/
 
-# Create an entrypoint script that runs in the current directory
-RUN echo '#!/bin/bash \n\
-set -e \n\
-\n\
-# Print welcome message \n\
-echo "======================================================" \n\
-echo "  LPA Prediction Validation Pipeline                  " \n\
-echo "======================================================" \n\
-echo "" \n\
-\n\
-# Detect if running in Singularity/Apptainer \n\
-RUNNING_IN_SINGULARITY=0 \n\
-if [ -e "/.singularity.d" ] || [ -e "/.apptainer.d" ] || [ -d "/singularity" ]; then \n\
-  RUNNING_IN_SINGULARITY=1 \n\
-  echo "Detected Singularity/Apptainer environment" \n\
-fi \n\
-\n\
-# Check for required directories and files \n\
-if [ ! -d "input" ]; then \n\
-  echo "ERROR: Required directory not found: ./input" \n\
-  echo "Please create the input directory in your current working directory" \n\
-  exit 1 \n\
-fi \n\
-\n\
-if [ ! -f "input/genotypes.vcf.gz" ]; then \n\
-  echo "ERROR: Required input file not found: ./input/genotypes.vcf.gz" \n\
-  echo "Please place your VCF file in the input directory" \n\
-  exit 1 \n\
-fi \n\
-\n\
-if [ ! -f "input/measured.csv" ]; then \n\
-  echo "ERROR: Required input file not found: ./input/measured.csv" \n\
-  echo "Please place your CSV file in the input directory" \n\
-  exit 1 \n\
-fi \n\
-\n\
-# Create required directories if they don'\''t exist \n\
-mkdir -p Results _targets \n\
-\n\
-echo "Found required input files:" \n\
-echo "- ./input/genotypes.vcf.gz" \n\
-echo "- ./input/measured.csv" \n\
-echo "" \n\
-\n\
-# Copy the targets script to current directory for execution \n\
-cp /opt/lpa-pipeline/_targets.R ./ \n\
-mkdir -p rmarkdown Scripts Resources \n\
-cp /opt/lpa-pipeline/rmarkdown/* ./rmarkdown/ \n\
-cp -r /opt/lpa-pipeline/Scripts/* ./Scripts/ \n\
-cp -r /opt/lpa-pipeline/Resources/* ./Resources/ \n\
-\n\
-# Run the pipeline \n\
-echo "Starting LPA prediction validation pipeline..." \n\
-echo "This may take some time depending on your dataset size." \n\
-echo "" \n\
-\n\
-  R --vanilla -e "targets::tar_make(callr_arguments = list(cmdargs = c(\"--slave\", \"--no-save\", \"--no-restore\", \"--vanilla\")))" \n\
-\n\
-# Check if report was generated \n\
-if [ -f "Results/lpa_validation_report.html" ]; then \n\
-  echo "Validation report generated successfully." \n\
-  echo "You can find all results in the Results directory." \n\
-else \n\
-  echo "WARNING: Pipeline completed but report was not generated." \n\
-  echo "Check the Results directory for any output files and error messages." \n\
-fi \n\
-\n\
-echo "" \n\
-echo "======================================================" \n\
-echo "  Pipeline execution finished                         " \n\
-echo "======================================================" \n\
-' > /usr/local/bin/run-lpa-pipeline.sh && \
-chmod +x /usr/local/bin/run-lpa-pipeline.sh
+# Create version file
+RUN echo "0.2.0" > /opt/lpa-pipeline/VERSION && \
+    echo "Built: $(date)" >> /opt/lpa-pipeline/VERSION && \
+    echo "Git commit: ${GITHUB_SHA:-unknown}" >> /opt/lpa-pipeline/VERSION
+
+# Copy the enhanced entrypoint script
+COPY entrypoint.sh /usr/local/bin/run-lpa-pipeline.sh
+RUN chmod +x /usr/local/bin/run-lpa-pipeline.sh
 
 # Set the working directory to /work which will be bound to the user's current directory
 WORKDIR /work

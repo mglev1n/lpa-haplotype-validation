@@ -27,8 +27,6 @@ get_available_threads() {
 THREADS=$(get_available_threads)
 REGION="chr6:159500000-161700000"
 EXTRACTION_REGION="chr6:160400000-160800000"
-TEMP_BASE_DIR=""  # New variable for custom temp directory
-OUTPUT_FILENAME=""  # New variable for custom output filename
 
 # Color codes for output
 RED='\033[0;31m'
@@ -49,21 +47,15 @@ Required arguments:
     -m, --map            Genetic map file for chromosome 6
 
 Optional arguments:
-    -f, --output-file    Output filename (default: {input_basename}.processed.bcf)
     -t, --threads        Number of threads (default: auto-detect, currently $THREADS)
     -s, --shapeit5       Path to ShapeIt5 phase_common_static binary
     --region             Target region (default: chr6:159500000-161700000)
     --extract-region     Extraction region (default: chr6:160400000-160800000)
-    --temp-dir           Base directory for temporary files (default: current directory)
-                         Note: Temporary files will be created in a .temp subdirectory
     -h, --help           Display this help message
 
 Example:
     $0 -i input.vcf.gz -o /path/to/output -x model.sites.vcf.gz \\
        -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz
-
-    $0 -i input.vcf.gz -o /path/to/output -f custom_output.bcf \\
-       -x model.sites.vcf.gz -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz
 EOF
     exit 1
 }
@@ -105,12 +97,6 @@ cleanup_temp() {
         log "Cleaning up temporary directory..."
         rm -rf "$TEMP_DIR"
     fi
-
-    # Also clean up the .temp directory if it's empty
-    if [[ -n "${TEMP_BASE_DIR:-}" ]] && [[ -d "$TEMP_BASE_DIR/.temp" ]]; then
-        # Only remove if empty (will fail silently if not empty, which is fine)
-        rmdir "$TEMP_BASE_DIR/.temp" 2>/dev/null || true
-    fi
 }
 
 # Parse command line arguments
@@ -123,10 +109,6 @@ while (( "$#" )); do
             ;;
         -o|--output-dir)
             OUTPUT_DIR=$2
-            shift 2
-            ;;
-        -f|--output-file)
-            OUTPUT_FILENAME=$2
             shift 2
             ;;
         -x|--sites)
@@ -157,10 +139,6 @@ while (( "$#" )); do
             EXTRACTION_REGION=$2
             shift 2
             ;;
-        --temp-dir)
-            TEMP_BASE_DIR=$2
-            shift 2
-            ;;
         -h|--help)
             usage
             ;;
@@ -185,21 +163,6 @@ fi
 [[ -z "${SITES_VCF:-}" ]] && error "Model sites VCF file is required (-x)"
 [[ -z "${REFERENCE_PANEL:-}" ]] && error "Reference panel is required (-r)"
 [[ -z "${GENETIC_MAP:-}" ]] && error "Genetic map is required (-m)"
-
-# Validate output filename if provided
-if [[ -n "$OUTPUT_FILENAME" ]]; then
-    # Check if filename has appropriate extension
-    if [[ ! "$OUTPUT_FILENAME" =~ \.(bcf|vcf|vcf\.gz)$ ]]; then
-        warn "Output filename '$OUTPUT_FILENAME' does not have a standard extension (.bcf, .vcf, or .vcf.gz)"
-        warn "Proceeding anyway, but you may want to use a standard extension"
-    fi
-
-    # Check if file already exists
-    if [[ -f "$OUTPUT_DIR/$OUTPUT_FILENAME" ]]; then
-        warn "Output file already exists: $OUTPUT_DIR/$OUTPUT_FILENAME"
-        warn "It will be overwritten"
-    fi
-fi
 
 # Check for required commands
 log "Checking required tools..."
@@ -226,61 +189,18 @@ check_file "$SHAPEIT5_BIN" "ShapeIt5 binary"
 mkdir -p "$OUTPUT_DIR"
 
 # Create temporary directory for intermediate files
-# Use current directory if no temp base directory specified
-if [[ -z "$TEMP_BASE_DIR" ]]; then
-    TEMP_BASE_DIR="$(pwd)"
-fi
-
-# Ensure temp base directory exists and is writable
-if [[ ! -d "$TEMP_BASE_DIR" ]]; then
-    error "Temporary directory base does not exist: $TEMP_BASE_DIR"
-fi
-
-if [[ ! -w "$TEMP_BASE_DIR" ]]; then
-    error "Temporary directory base is not writable: $TEMP_BASE_DIR"
-fi
-
-# Create .temp subdirectory within the base directory
-TEMP_PARENT="$TEMP_BASE_DIR/.temp"
-mkdir -p "$TEMP_PARENT"
-
-if [[ ! -d "$TEMP_PARENT" ]]; then
-    error "Failed to create .temp directory in $TEMP_BASE_DIR"
-fi
-
-# Create unique temporary directory within the .temp directory
-TEMP_DIR=$(mktemp -d "$TEMP_PARENT/lpa_preprocess.XXXXXX")
-if [[ ! -d "$TEMP_DIR" ]]; then
-    error "Failed to create temporary directory in $TEMP_PARENT"
-fi
-
-# Set up comprehensive cleanup traps for various signals
-# This helps ensure cleanup even if the process is killed
+TEMP_DIR=$(mktemp -d -p "${TMPDIR:-/tmp}" lpa_preprocess.XXXXXX)
 trap cleanup_temp EXIT
-trap cleanup_temp SIGTERM
-trap cleanup_temp SIGINT
-trap cleanup_temp SIGQUIT
 
 log "Using temporary directory: $TEMP_DIR"
 log "Using $THREADS threads for parallel processing"
-
-# Note: Create a file to mark this run in case cleanup is needed later
-echo "LPA processing started at $(date)" > "$TEMP_DIR/process_info.txt"
-echo "PID: $" >> "$TEMP_DIR/process_info.txt"
 
 # Set up file paths
 BASENAME=$(basename "$INPUT_VCF" | sed 's/\.[^.]*$//')
 CHR_FIXED_VCF="$TEMP_DIR/${BASENAME}.chr6.bcf"
 EXTRACTED_BCF="$TEMP_DIR/${BASENAME}.extracted.bcf"
 IMPUTED_BCF="$TEMP_DIR/${BASENAME}.imputed.bcf"
-
-# Set output filename - use custom name if provided, otherwise use default
-if [[ -n "$OUTPUT_FILENAME" ]]; then
-    FINAL_BCF="$OUTPUT_DIR/$OUTPUT_FILENAME"
-else
-    FINAL_BCF="$OUTPUT_DIR/${BASENAME}.processed.bcf"
-fi
-
+FINAL_BCF="$OUTPUT_DIR/${BASENAME}.processed.bcf"
 CHR_RENAME_FILE="$TEMP_DIR/chr_rename.txt"
 LOG_FILE="$OUTPUT_DIR/preprocessing.log"
 
@@ -291,12 +211,20 @@ exec 2>&1
 log "Starting LPA genotype preprocessing pipeline"
 log "Input: $INPUT_VCF"
 log "Output directory: $OUTPUT_DIR"
-log "Output file: $FINAL_BCF"
 log "Model sites: $SITES_VCF"
 
 # Step 1: Check if input VCF is indexed
 log "Creating index for input VCF/BCF file..."
 bcftools index -f "$INPUT_VCF"
+
+# log "Checking VCF index..."
+# if [[ "$INPUT_VCF" =~ \.vcf\.gz$ ]] && [[ ! -f "${INPUT_VCF}.tbi" && ! -f "${INPUT_VCF}.csi" ]]; then
+#     log "Creating VCF index..."
+#     bcftools index -f "$INPUT_VCF"
+# elif [[ "$INPUT_VCF" =~ \.bcf$ ]] && [[ ! -f "${INPUT_VCF}.csi" ]]; then
+#     log "Creating BCF index..."
+#     bcftools index -f "$INPUT_VCF"
+# fi
 
 # Step 2: Determine chromosome naming convention
 log "Determining chromosome naming convention..."
@@ -444,9 +372,7 @@ LPA Genotype Preprocessing Summary
 Date: $(date)
 Input: $INPUT_VCF
 Output: $FINAL_BCF
-Output filename: $(basename "$FINAL_BCF")
 Threads used: $THREADS
-Temporary directory: $TEMP_DIR
 
 Original chromosome naming: $CHR
 Standardized to: chr6
