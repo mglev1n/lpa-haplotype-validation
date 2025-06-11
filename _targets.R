@@ -110,7 +110,7 @@ list(
                    ),
                    echo = TRUE )
 
-      return(cleaned_genotypes$stdout)
+      "input/genotypes.processed.bcf"
    },
    description = "Process VCF file to impute missing variants and extract relevant SNPs"
   ),
