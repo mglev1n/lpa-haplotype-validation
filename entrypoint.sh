@@ -312,6 +312,16 @@ if [[ "$DEBUG_MODE" == "true" ]]; then
     fi
 fi
 
+# Zip results folder
+
+if [[ -d "Results" ]]; then
+    log "Zipping results directory..."
+    zip -r Results.zip Results
+    log "Results zipped to Results.zip"
+else
+    warn "Results directory not found, skipping zipping."
+fi
+
 echo ""
 echo "======================================================"
 echo "  Pipeline execution finished                         "
