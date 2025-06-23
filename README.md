@@ -19,6 +19,19 @@ The pipeline:
 - **System requirements:** 4+ CPU cores, 8+ GB RAM recommended
 - **Storage:** ~5-10 GB free space for intermediate files
 
+## Directory Structure
+
+### Initial Setup
+
+```
+lpa-validation-project/
+├── input/
+│   ├── genotypes.vcf.gz        # Your phased genotype data
+│   ├── genotypes.vcf.gz.tbi    # Index file (auto-generated if missing)
+│   └── measured.csv            # Measured Lp(a) values + demographics
+└── (pipeline files will be copied here when run)
+```
+
 ## Input File Requirements
 
 The pipeline requires two input files in the `input/` directory:
