@@ -5,12 +5,12 @@ This pipeline validates LPA (Lipoprotein(a)) prediction models by comparing pred
 ## Overview
 
 The pipeline:
-1. Processes phased genotype data from VCF files; imputation will automatically be performed to fill in missing LPA variants (if necessary)
-2. Uses the `lpapredictr` package to predict LPA levels
+1. Processes phased genotype data from VCF files; imputation will automatically be performed to fill in missing LPA variants using SHAPEIT5 (if necessary)
+2. Uses the `lpapredictr` package to predict LPA levels from the phased genotype data
 3. Compares predictions to measured LPA values, and compares diagnostic potential vs. usual care among the full cohort
 4. Generates validation statistics and visualizations
 
-**Expected Runtime:** 1 minutes to 3 hours depending on dataset size and compute resources.
+**Expected Runtime:** 1 to 3 hours depending on dataset size and compute resources.
 
 ## Prerequisites
 
@@ -72,14 +72,16 @@ bcftools view -H input/genotypes.vcf.gz | head -5
 ### 2. Measured LPA Values + Demographics: `input/measured.csv`
 
 > [!IMPORTANT]  
-> Include the **full genotyped biobank cohort** - the `lpa_nmol_max` column can be `NA` for samples without measured Lp(a) values.
+> Include the **full genotyped biobank cohort** - the `lpa_nmol_max` column can be `NA` for samples without measured Lp(a) values. There should be 1 row per participant. For individuals with more than 1 available measurement, select the maximum (convert to nmol/L first).
 
 > [!CAUTION]
 > **Unit conversion required:** Lp(a) values measured in mg/dL must be converted to nmol/L by multiplying by 2.15
 
-**Required columns:**
+**LPA columns:**
 - `ID`: Sample identifiers (must exactly match VCF sample IDs)
-- `lpa_nmol_max`: Measured LPA values in nmol/L (convert from mg/dL × 2.15). Use `NA` for unmeasured samples.
+- `lpa_nmol_max`: Measured LPA values in nmol/L (convert from mg/dL × 2.15). Use `NA` for unmeasured samples. 
+  - If multiple measurements exist for a participant, use the maximum value.
+  - If no measurements are available, leave as `NA`.
 - `GIA`: Genetic ancestry group - must be one of: `"EUR"`, `"AFR"`, `"EAS"`, `"CSA"`, `"AMR"`, `"MID"`, `"Other"`
 
 **Demographic columns**:
@@ -104,7 +106,7 @@ SAMPLE003,250.3,EAS,55,Male,FALSE,FALSE
 ```
 
 **Validation checklist:**
-- [ ] All sample IDs in CSV exist in the VCF file
+- [ ] Sample IDs in CSV exist in the VCF file
 - [ ] `lpa_nmol_max` values are in nmol/L (not mg/dL)
 - [ ] `GIA` values use only valid ancestry codes
 
@@ -163,7 +165,7 @@ docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:latest
 ### Option 3: Local Installation (Advanced Users)
 
 > [!CAUTION]
-> Local installation requires additional system dependencies (bcftools, shapeit5, reference panels) that are pre-installed in the containers. Only recommended if you're familiar with these tools.
+> Local installation requires additional system dependencies (bcftools, SHAPEIT5, reference panels) that are pre-installed in the containers. Only recommended if you're familiar with these tools.
 
 **Step 1:** Clone and setup
 ```bash
