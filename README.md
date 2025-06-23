@@ -65,13 +65,6 @@ Place a CSV file at `input/measured.csv` containing measured LPA values in nmol/
 - `PVD` (TRUE/FALSE): 2 or more instances of phecode `443` (Peripheral Vascular Disease)
 - `IS` (TRUE/FALSE): 2 or more instances of phecode `433.21` (Ischemic Stroke)
 
-**Example:**
-```
-ID,lpa_nmol_max,GIA,age,sex
-Sample1,125.6,EUR,54,F
-Sample2,34.2,AFR,63,M
-...
-```
 
 ## Running the Pipeline
 
@@ -79,24 +72,13 @@ There are three options for running the pipeline:
 
 ### Option 1: Running with Singularity/Apptainer (Recommended for HPC)
 
-1. Prepare your directory structure:
-   ```bash
-   mkdir -p input
-   cp /path/to/your/genotypes.vcf.gz input/
-   cp /path/to/your/measured.csv input/
-   ```
-
-2. Run the container in the current directory:
-   ```bash
-   singularity run --pwd /work -B $(pwd):/work lpa-validation_latest.sif
-   ```
-
-   All results will be written to the `Results` directory in your current working directory.
-
-3. For HPC environments:
    ```bash
    # Go to your project directory
    cd /project/path/lpa-validation
+   
+   # Download the latest singularity image
+   # singularity/apptainer may neeed to be invoked using environment modules like: module load singuarlarity
+   singularity pull oras://ghcr.io/mglev1n/lpa-validation-singularity:latest
    
    # Create input directory and add files
    mkdir -p input
@@ -104,10 +86,15 @@ There are three options for running the pipeline:
    cp /path/to/your/measured.csv input/
    
    # Run with Singularity/Apptainer
-   singularity run --pwd /work -B $(pwd):/work /path/to/lpa-validation_latest.sif
+   singularity run --pwd /work -B $(pwd):/work  lpa-validation-singularity_latest.sif
    ```
 
    If you encounter temp directory issues, add: `-B $(pwd)/tmp:/tmp`
+   
+   Submit job to a scheduler (Eg. LSF) with 4 cores:
+   ```bash
+   bsub -n 4 "module load singularity; singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_latest.sif"
+   ```
 
 ### Option 2: Using Docker
 
@@ -119,6 +106,9 @@ There are three options for running the pipeline:
    ```
 
 ### Option 3: Running Locally from GitHub
+
+> [!CAUTION]
+> Running locally requires additional setup/dependencies including bcftools, shapeit5, and reference panels, that are otherwise included by default within the Singularity/Docker containers. This option is not recommended unless you are familiar with the required tools and their configurations.
 
 1. Clone the repository:
    ```bash
@@ -145,10 +135,7 @@ There are three options for running the pipeline:
    cp your_measured.csv input/measured.csv
    ```
 
-6. Run the pipeline:
-   ```bash
-   ./run.sh
-   ```
+6. Run the pipeline in `_targets.R`
 
 ## Output Files
 
