@@ -1,12 +1,12 @@
 # LPA Prediction Validation Pipeline
 
-This pipeline validates LPA (Lipoprotein(a)) prediction models by comparing predicted values from genotype data against measured values across various genetic ancestry groups.
+This pipeline compares predicted Lipoprotein(a) values from genotype data against measured values across various genetic ancestry groups.
 
 ## Overview
 
 The pipeline:
-1. Processes phased genotype data from VCF files; imputation will automatically be performed to fill in missing LPA variants using SHAPEIT5 (if necessary)
-2. Uses the `lpapredictr` package to predict LPA levels from the phased genotype data
+1. Processes phased genotype data from VCF files; imputation will automatically be performed to fill-in missing LPA variants using SHAPEIT5 (if necessary)
+2. Uses the `lpapredictr` R package to predict LPA levels from the phased genotype data
 3. Compares predictions to measured LPA values, and compares diagnostic potential vs. usual care among the full cohort
 4. Generates validation statistics and visualizations
 
