@@ -130,8 +130,34 @@ cp /path/to/your/measured.csv input/
 # Verify files are present and readable
 ls -la input/
 ```
+**Step 2:** Generate GitHub token
 
-**Step 2:** Download and run the container
+1) In the upper-right corner of any page on GitHub, click your profile picture, then click  Settings.
+
+1) In the left sidebar, click  Developer settings.
+
+1) In the left sidebar, under  Personal access tokens, click Tokens (classic).
+
+1) Select Generate new token, then click Generate new token (classic).
+
+1) In the "Note" field, give your token a descriptive name (eg. "LPA-haplotype-validation").
+
+1) To give your token an expiration, select Expiration, then choose a default option or click Custom to enter a date.
+
+1) Select the scopes you'd like to grant this token - to download the container you will need at least "read:packages" scopes
+
+1) Click Generate token.
+
+1) Copy the token and save it securely. You won't be able to see it again.
+
+**Step 3:** Authenticate Singularity with Github Container Repository
+
+```bash
+# Authenticate with your Github username and token you generated
+singularity remote login --username github_username oras://ghcr.io/mglev1n/lpa-validation-singularity
+```
+
+**Step 4:** Download and run the container
 ```bash
 # Download the container (one-time setup)
 singularity pull oras://ghcr.io/mglev1n/lpa-validation-singularity:latest
