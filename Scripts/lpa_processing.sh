@@ -113,6 +113,17 @@ cleanup_temp() {
     fi
 }
 
+# Function to fill AN/AC tags
+fill_tags() {
+    local input_file=$1
+    local output_file=$2
+    local description=$3
+
+    log "Filling AN/AC tags for $description..."
+    bcftools +fill-tags "$input_file" -Ob -o "$output_file" -- -t AN,AC
+    bcftools index -f "$output_file"
+}
+
 # Parse command line arguments
 PARAMS=""
 while (( "$#" )); do
@@ -266,13 +277,16 @@ log "Using $THREADS threads for parallel processing"
 
 # Note: Create a file to mark this run in case cleanup is needed later
 echo "LPA processing started at $(date)" > "$TEMP_DIR/process_info.txt"
-echo "PID: $" >> "$TEMP_DIR/process_info.txt"
+echo "PID: $$" >> "$TEMP_DIR/process_info.txt"
 
 # Set up file paths
 BASENAME=$(basename "$INPUT_VCF" | sed 's/\.[^.]*$//')
 CHR_FIXED_VCF="$TEMP_DIR/${BASENAME}.chr6.bcf"
+CHR_FIXED_TAGGED_VCF="$TEMP_DIR/${BASENAME}.chr6.tagged.bcf"
 EXTRACTED_BCF="$TEMP_DIR/${BASENAME}.extracted.bcf"
 IMPUTED_BCF="$TEMP_DIR/${BASENAME}.imputed.bcf"
+IMPUTED_TAGGED_BCF="$TEMP_DIR/${BASENAME}.imputed.tagged.bcf"
+TEMP_FINAL_BCF="$TEMP_DIR/${BASENAME}.final.bcf"
 
 # Set output filename - use custom name if provided, otherwise use default
 if [[ -n "$OUTPUT_FILENAME" ]]; then
@@ -315,10 +329,15 @@ if [[ "$CHR" == "6" ]]; then
     bcftools annotate --rename-chrs "$CHR_RENAME_FILE" \
         "$INPUT_VCF" -Ob -o "$CHR_FIXED_VCF"
     bcftools index -f "$CHR_FIXED_VCF"
-    WORKING_VCF="$CHR_FIXED_VCF"
+
+    # Fill AN/AC tags after chromosome renaming
+    fill_tags "$CHR_FIXED_VCF" "$CHR_FIXED_TAGGED_VCF" "chromosome-renamed data"
+    WORKING_VCF="$CHR_FIXED_TAGGED_VCF"
 else
     log "Chromosome naming already uses chr6 format"
-    WORKING_VCF="$INPUT_VCF"
+    # Still need to fill AN/AC tags for the original file
+    fill_tags "$INPUT_VCF" "$CHR_FIXED_TAGGED_VCF" "input data"
+    WORKING_VCF="$CHR_FIXED_TAGGED_VCF"
 fi
 
 # Step 4: Extract variants at model sites
@@ -387,14 +406,18 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
         error "ShapeIt5 imputation failed"
     fi
 
+    # Fill AN/AC tags after imputation
+    fill_tags "$IMPUTED_BCF" "$IMPUTED_TAGGED_BCF" "imputed data"
+
     # Re-extract after imputation
     log "Re-extracting variants after imputation..."
     bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
-        "$IMPUTED_BCF" \
+        "$IMPUTED_TAGGED_BCF" \
         "$SITES_VCF" \
-        | bcftools annotate -x INFO,^FMT/GT -Ob -o "$FINAL_BCF"
+        | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
 
-    bcftools index -f "$FINAL_BCF"
+    # Fill AN/AC tags for final extracted data
+    fill_tags "$TEMP_FINAL_BCF" "$FINAL_BCF" "final extracted data"
 
     # Verify results after imputation
     N_FINAL=$(bcftools view -H "$FINAL_BCF" | wc -l)
@@ -418,14 +441,25 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
         log "All missing genotypes successfully imputed"
     fi
 else
-    log "No imputation performed. Using extracted data as final."
-    cp "$EXTRACTED_BCF" "$FINAL_BCF"
-    cp "${EXTRACTED_BCF}.csi" "${FINAL_BCF}.csi"
+    log "No imputation performed. Filling AN/AC tags and using extracted data as final."
+    # Fill AN/AC tags for the extracted data before making it final
+    fill_tags "$EXTRACTED_BCF" "$FINAL_BCF" "final extracted data"
     cp "$TEMP_DIR/extracted_stats.txt" "$OUTPUT_DIR/final_stats.txt"
 fi
 
 # Step 8: Final validation
 log "Performing final validation..."
+
+# Verify AN/AC tags are present
+log "Verifying AN/AC tags are present in final output..."
+AN_COUNT=$(bcftools view -h "$FINAL_BCF" | grep -c "##INFO=.*ID=AN" || echo "0")
+AC_COUNT=$(bcftools view -h "$FINAL_BCF" | grep -c "##INFO=.*ID=AC" || echo "0")
+
+if [[ "$AN_COUNT" -eq 0 || "$AC_COUNT" -eq 0 ]]; then
+    error "AN/AC tags not found in final output. This is required for LPA prediction."
+else
+    log "AN/AC tags successfully added to final output"
+fi
 
 # Check for multiallelic sites
 N_MULTIALLELIC=$(bcftools view -H "$FINAL_BCF" | awk '$5 ~ /,/' | wc -l)
@@ -457,11 +491,12 @@ Final sites: $(bcftools view -H "$FINAL_BCF" | wc -l)
 Total samples: $(bcftools query -l "$FINAL_BCF" | wc -l)
 Multiallelic sites: $N_MULTIALLELIC
 Samples with missing data (final): $FINAL_MISSING
+AN/AC tags present: $(if [[ "$AN_COUNT" -gt 0 && "$AC_COUNT" -gt 0 ]]; then echo "Yes"; else echo "No"; fi)
 EOF
 
 cat "$OUTPUT_DIR/preprocessing_summary.txt"
 
 log "Preprocessing completed successfully!"
-log "Ready-to-use BCF file: $FINAL_BCF"
+log "Ready-to-use BCF file with AN/AC tags: $FINAL_BCF"
 
 echo $FINAL_BCF
