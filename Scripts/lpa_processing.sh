@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Script: preprocess_lpa_genotypes.sh
-# Purpose: Preprocess genotype data for LPA prediction
-# Requirements: bcftools, shapeit5
+# Purpose: Preprocess genotype data for LPA prediction using ShapeIt5 for phasing and impute5 for formal imputation
+# Requirements: bcftools, shapeit5, impute5
 
 # Function to detect available CPU cores
 get_available_threads() {
@@ -29,6 +29,7 @@ REGION="chr6:159500000-161700000"
 EXTRACTION_REGION="chr6:160400000-160800000"
 TEMP_BASE_DIR=""  # New variable for custom temp directory
 OUTPUT_FILENAME=""  # New variable for custom output filename
+IMPUTE5_BIN=""  # Path to impute5 binary
 
 # Color codes for output
 RED='\033[0;31m'
@@ -52,6 +53,7 @@ Optional arguments:
     -f, --output-file    Output filename (default: {input_basename}.processed.bcf)
     -t, --threads        Number of threads (default: auto-detect, currently $THREADS)
     -s, --shapeit5       Path to ShapeIt5 phase_common_static binary
+    -p, --impute5        Path to impute5 binary (for formal imputation if needed)
     --region             Target region (default: chr6:159500000-161700000)
     --extract-region     Extraction region (default: chr6:160400000-160800000)
     --temp-dir           Base directory for temporary files (default: current directory)
@@ -63,7 +65,8 @@ Example:
        -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz
 
     $0 -i input.vcf.gz -o /path/to/output -f custom_output.bcf \\
-       -x model.sites.vcf.gz -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz
+       -x model.sites.vcf.gz -r /path/to/reference.vcf.gz -m /path/to/chr6.gmap.gz \\
+       -p /usr/local/bin/impute5 -s /usr/local/bin/phase_common_static
 EOF
     exit 1
 }
@@ -160,6 +163,10 @@ while (( "$#" )); do
             SHAPEIT5_BIN=$2
             shift 2
             ;;
+        -p|--impute5)
+            IMPUTE5_BIN=$2
+            shift 2
+            ;;
         --region)
             REGION=$2
             shift 2
@@ -225,6 +232,26 @@ if [[ -z "${SHAPEIT5_BIN:-}" ]]; then
     fi
 fi
 
+# Set default impute5 path if not provided
+if [[ -z "${IMPUTE5_BIN:-}" ]]; then
+    if command -v impute5 &> /dev/null; then
+        IMPUTE5_BIN="impute5"
+        log "Found impute5 in PATH: $(which impute5)"
+    else
+        warn "impute5 binary not found in PATH. Formal imputation will not be available if ShapeIt5 cannot fill all missing sites."
+        warn "To enable full imputation, specify path with -p flag or ensure impute5 is in PATH"
+    fi
+else
+    # Validate the provided impute5 path
+    if [[ ! -f "$IMPUTE5_BIN" ]]; then
+        error "Specified impute5 binary not found: $IMPUTE5_BIN"
+    fi
+    if [[ ! -x "$IMPUTE5_BIN" ]]; then
+        error "Specified impute5 binary is not executable: $IMPUTE5_BIN"
+    fi
+    log "Using specified impute5 binary: $IMPUTE5_BIN"
+fi
+
 # Validate input files
 log "Validating input files..."
 check_file "$INPUT_VCF" "Input VCF/BCF"
@@ -232,6 +259,11 @@ check_file "$SITES_VCF" "Model sites VCF"
 check_file "$REFERENCE_PANEL" "Reference panel"
 check_file "$GENETIC_MAP" "Genetic map"
 check_file "$SHAPEIT5_BIN" "ShapeIt5 binary"
+
+# Validate impute5 binary if provided
+if [[ -n "${IMPUTE5_BIN:-}" ]]; then
+    check_file "$IMPUTE5_BIN" "impute5 binary"
+fi
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -416,10 +448,61 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
         "$SITES_VCF" \
         | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
 
+    # Check coverage after shapeit5
+    N_SHAPEIT5_FINAL=$(bcftools view -H "$TEMP_FINAL_BCF" | wc -l)
+    SHAPEIT5_COVERAGE_PCT=$(awk "BEGIN {printf \"%.1f\", ($N_SHAPEIT5_FINAL/$N_MODEL_SITES)*100}")
+
+    log "Sites after ShapeIt5: $N_SHAPEIT5_FINAL"
+    log "Coverage after ShapeIt5: $SHAPEIT5_COVERAGE_PCT%"
+
+    # Step 7b: If sites are still missing after shapeit5, use impute5 for formal imputation
+    if [[ "$N_SHAPEIT5_FINAL" -lt "$N_MODEL_SITES" ]]; then
+        warn "Still missing $(($N_MODEL_SITES - $N_SHAPEIT5_FINAL)) sites after ShapeIt5 phasing."
+        log "Running formal imputation with impute5..."
+
+        # Check if impute5 binary is available
+        if [[ -z "${IMPUTE5_BIN:-}" ]]; then
+            error "impute5 binary not found. Please specify with -p flag or ensure impute5 is in PATH"
+        fi
+
+        # Define impute5 output files
+        IMPUTE5_BCF="$TEMP_DIR/${BASENAME}.impute5.bcf"
+        IMPUTE5_TAGGED_BCF="$TEMP_DIR/${BASENAME}.impute5.tagged.bcf"
+
+        # Run impute5 with the phased data from shapeit5
+        log "Running impute5 with $THREADS threads..."
+        "$IMPUTE5_BIN" \
+            --h "$REFERENCE_PANEL" \
+            --m "$GENETIC_MAP" \
+            --g "$IMPUTED_TAGGED_BCF" \
+            --r "$REGION" \
+            --o "$IMPUTE5_BCF" \
+            --threads "$THREADS" 2>&1 | tee -a "$LOG_FILE"
+
+        if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+            error "impute5 imputation failed"
+        fi
+
+        # Fill AN/AC tags after impute5
+        fill_tags "$IMPUTE5_BCF" "$IMPUTE5_TAGGED_BCF" "impute5 imputed data"
+
+        # Re-extract after impute5
+        log "Re-extracting variants after impute5..."
+        bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
+            "$IMPUTE5_TAGGED_BCF" \
+            "$SITES_VCF" \
+            | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
+
+        # Update the imputed BCF reference for downstream steps
+        IMPUTED_TAGGED_BCF="$IMPUTE5_TAGGED_BCF"
+
+        log "impute5 formal imputation completed"
+    fi
+
     # Fill AN/AC tags for final extracted data
     fill_tags "$TEMP_FINAL_BCF" "$FINAL_BCF" "final extracted data"
 
-    # Verify results after imputation
+    # Verify results after all imputation steps
     N_FINAL=$(bcftools view -H "$FINAL_BCF" | wc -l)
     FINAL_COVERAGE_PCT=$(awk "BEGIN {printf \"%.1f\", ($N_FINAL/$N_MODEL_SITES)*100}")
 
@@ -427,7 +510,7 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
     log "Final coverage: $FINAL_COVERAGE_PCT%"
 
     if [[ "$N_FINAL" -lt "$N_MODEL_SITES" ]]; then
-        warn "Still missing $(($N_MODEL_SITES - $N_FINAL)) sites after imputation"
+        warn "Still missing $(($N_MODEL_SITES - $N_FINAL)) sites after all imputation attempts"
     fi
 
     # Check missing genotypes after imputation
@@ -445,6 +528,8 @@ else
     # Fill AN/AC tags for the extracted data before making it final
     fill_tags "$EXTRACTED_BCF" "$FINAL_BCF" "final extracted data"
     cp "$TEMP_DIR/extracted_stats.txt" "$OUTPUT_DIR/final_stats.txt"
+    # Set N_SHAPEIT5_FINAL for summary report
+    N_SHAPEIT5_FINAL="N/A (no imputation needed)"
 fi
 
 # Step 8: Final validation
@@ -472,6 +557,13 @@ FINAL_MISSING=$(grep "^PSC" "$OUTPUT_DIR/final_stats.txt" | awk '$14>0' | wc -l 
 
 # Create summary report
 log "Creating summary report..."
+
+# Check if impute5 was used
+IMPUTE5_USED="No"
+if [[ -f "$TEMP_DIR/${BASENAME}.impute5.bcf" ]]; then
+    IMPUTE5_USED="Yes"
+fi
+
 cat > "$OUTPUT_DIR/preprocessing_summary.txt" << EOF
 LPA Genotype Preprocessing Summary
 ==================================
@@ -481,12 +573,19 @@ Output: $FINAL_BCF
 Threads used: $THREADS
 Temporary directory: $TEMP_DIR
 
+Tools used:
+- bcftools: $(which bcftools 2>/dev/null || echo "path not found")
+- ShapeIt5: ${SHAPEIT5_BIN:-not found}
+- impute5: ${IMPUTE5_BIN:-not found}
+
 Original chromosome naming: $CHR
 Standardized to: chr6
 Model sites required: $N_MODEL_SITES
 Initial extracted sites: $N_EXTRACTED (${COVERAGE_PCT}%)
 Samples with missing data (before imputation): $N_SAMPLES_WITH_MISSING / $TOTAL_SAMPLES
-Imputation performed: $NEED_IMPUTATION
+ShapeIt5 phasing/imputation performed: $NEED_IMPUTATION
+Sites after ShapeIt5: ${N_SHAPEIT5_FINAL:-N/A}
+impute5 formal imputation performed: $IMPUTE5_USED
 Final sites: $(bcftools view -H "$FINAL_BCF" | wc -l)
 Total samples: $(bcftools query -l "$FINAL_BCF" | wc -l)
 Multiallelic sites: $N_MULTIALLELIC

@@ -38,6 +38,10 @@ RUN git clone --recurse-submodules https://github.com/samtools/htslib.git /tmp/h
     && wget -O /usr/local/bin/phase_common_static https://github.com/odelaneau/shapeit5/releases/download/v5.1.1/phase_common_static \
     && chmod +x /usr/local/bin/phase_common_static
 
+# Copy impute5 binary from the Applications folder in the repository
+COPY Applications/impute5_v1.2.0/impute5_v1.2.0_static /usr/local/bin/impute5
+RUN chmod +x /usr/local/bin/impute5
+
 # Install renv and required packages
 RUN R -e "install.packages('renv', repos = c(CRAN = 'https://cloud.r-project.org'))"
 
