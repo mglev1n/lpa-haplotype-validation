@@ -317,7 +317,6 @@ CHR_FIXED_VCF="$TEMP_DIR/${BASENAME}.chr6.bcf"
 CHR_FIXED_TAGGED_VCF="$TEMP_DIR/${BASENAME}.chr6.tagged.bcf"
 EXTRACTED_BCF="$TEMP_DIR/${BASENAME}.extracted.bcf"
 IMPUTED_BCF="$TEMP_DIR/${BASENAME}.imputed.bcf"
-IMPUTED_TAGGED_BCF="$TEMP_DIR/${BASENAME}.imputed.tagged.bcf"
 TEMP_FINAL_BCF="$TEMP_DIR/${BASENAME}.final.bcf"
 
 # Set output filename - use custom name if provided, otherwise use default
@@ -438,13 +437,12 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
         error "ShapeIt5 imputation failed"
     fi
 
-    # Fill AN/AC tags after imputation
-    fill_tags "$IMPUTED_BCF" "$IMPUTED_TAGGED_BCF" "imputed data"
+    bcftools index -f "$IMPUTED_BCF"
 
-    # Re-extract after imputation
-    log "Re-extracting variants after imputation..."
+    # Re-extract after imputation (before filling tags)
+    log "Re-extracting variants after ShapeIt5 imputation..."
     bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
-        "$IMPUTED_TAGGED_BCF" \
+        "$IMPUTED_BCF" \
         "$SITES_VCF" \
         | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
 
@@ -467,15 +465,15 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
 
         # Define impute5 output files
         IMPUTE5_BCF="$TEMP_DIR/${BASENAME}.impute5.bcf"
-        IMPUTE5_TAGGED_BCF="$TEMP_DIR/${BASENAME}.impute5.tagged.bcf"
 
         # Run impute5 with the phased data from shapeit5
         log "Running impute5 with $THREADS threads..."
         "$IMPUTE5_BIN" \
             --h "$REFERENCE_PANEL" \
             --m "$GENETIC_MAP" \
-            --g "$IMPUTED_TAGGED_BCF" \
+            --g "$IMPUTED_BCF" \
             --r "$REGION" \
+            --buffer-region "$REGION" \
             --o "$IMPUTE5_BCF" \
             --threads "$THREADS" 2>&1 | tee -a "$LOG_FILE"
 
@@ -483,23 +481,20 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
             error "impute5 imputation failed"
         fi
 
-        # Fill AN/AC tags after impute5
-        fill_tags "$IMPUTE5_BCF" "$IMPUTE5_TAGGED_BCF" "impute5 imputed data"
+        # bcftools index -f "$IMPUTE5_BCF"
 
-        # Re-extract after impute5
+        # Re-extract after impute5 (before filling tags)
         log "Re-extracting variants after impute5..."
         bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
-            "$IMPUTE5_TAGGED_BCF" \
+            "$IMPUTE5_BCF" \
             "$SITES_VCF" \
             | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
 
-        # Update the imputed BCF reference for downstream steps
-        IMPUTED_TAGGED_BCF="$IMPUTE5_TAGGED_BCF"
-
-        log "impute5 formal imputation completed"
+        log "impute5 imputation completed"
     fi
 
-    # Fill AN/AC tags for final extracted data
+    # Fill AN/AC tags for final extracted data only
+    log "Filling AN/AC tags for final extracted sites..."
     fill_tags "$TEMP_FINAL_BCF" "$FINAL_BCF" "final extracted data"
 
     # Verify results after all imputation steps
@@ -511,6 +506,8 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
 
     if [[ "$N_FINAL" -lt "$N_MODEL_SITES" ]]; then
         warn "Still missing $(($N_MODEL_SITES - $N_FINAL)) sites after all imputation attempts"
+    else
+        log "All required model sites successfully recovered"
     fi
 
     # Check missing genotypes after imputation
@@ -524,8 +521,8 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
         log "All missing genotypes successfully imputed"
     fi
 else
-    log "No imputation performed. Filling AN/AC tags and using extracted data as final."
-    # Fill AN/AC tags for the extracted data before making it final
+    log "No imputation performed. Filling AN/AC tags for extracted data and using as final."
+    # Fill AN/AC tags for the extracted data
     fill_tags "$EXTRACTED_BCF" "$FINAL_BCF" "final extracted data"
     cp "$TEMP_DIR/extracted_stats.txt" "$OUTPUT_DIR/final_stats.txt"
     # Set N_SHAPEIT5_FINAL for summary report
