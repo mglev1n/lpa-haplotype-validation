@@ -161,13 +161,13 @@ singularity remote login --username github_username oras://ghcr.io/mglev1n/lpa-v
 ```bash
 # Download a pinned release of the container (one-time setup)
 # Use the version specified by the study coordinators; see "Container Versions" below
-singularity pull oras://ghcr.io/mglev1n/lpa-validation-singularity:0.3.0
+singularity pull oras://ghcr.io/mglev1n/lpa-validation-singularity:0.3.1
 
 # Run the pipeline
-singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.0.sif
+singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.1.sif
 
 # Confirm which version you ran
-singularity run lpa-validation-singularity_0.3.0.sif --version
+singularity run lpa-validation-singularity_0.3.1.sif --version
 ```
 
 **For HPC clusters with job schedulers:**
@@ -175,7 +175,7 @@ singularity run lpa-validation-singularity_0.3.0.sif --version
 # Example LSF submission (4 cores, 16 GB memory)
 bsub -n 4 -M 16000 -R "rusage[mem=16000]" \
   "module load singularity; \
-   singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.0.sif"
+   singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.1.sif"
 ```
 
 **Troubleshooting tips:**
@@ -189,7 +189,7 @@ bsub -n 4 -M 16000 -R "rusage[mem=16000]" \
 cd /path/to/lpa-validation-project
 
 # Run the pipeline
-docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:0.3.0
+docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:0.3.1
 ```
 
 ### Container Versions
@@ -198,13 +198,13 @@ Each container build is published under several tags. Use a release tag so that 
 
 | Tag | Example | Meaning |
 |-----|---------|---------|
-| Release | `0.3.0` | Fixed release, built from a `v0.3.0` Git tag. Recommended. |
+| Release | `0.3.1` | Fixed release, built from a `v0.3.1` Git tag. Recommended. |
 | Commit | `sha-1a2b3c4` | Fixed build of one Git commit, including untagged commits on `main`. |
 | `latest` | `latest` | Most recent build. Changes whenever `main` is updated; not recommended for multi-site analyses. |
 
 The Docker image (`ghcr.io/mglev1n/lpa-validation`) and the Singularity image (`ghcr.io/mglev1n/lpa-validation-singularity`) use the same tags. `--version` prints the version and Git commit of the container you are running. Release builds report the release number; builds of untagged commits report `dev-<commit>`.
 
-Maintainers publish a release by pushing a Git tag: `git tag v0.3.0 && git push origin v0.3.0`. The Docker workflow builds the image, and the Singularity workflow then converts it and attaches the `.sif` file to a GitHub release.
+Maintainers publish a release by pushing a Git tag: `git tag v0.3.1 && git push origin v0.3.1`. The Docker workflow builds the image, and the Singularity workflow then converts it and attaches the `.sif` file to a GitHub release.
 
 ### Genotype Preprocessing Only
 
@@ -212,10 +212,10 @@ The `--preprocess-only` flag runs only the genotype preprocessing step: chromoso
 
 ```bash
 # Singularity/Apptainer
-singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.0.sif --preprocess-only
+singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.1.sif --preprocess-only
 
 # Docker
-docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:0.3.0 --preprocess-only
+docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:0.3.1 --preprocess-only
 
 # Local installation
 Rscript -e 'targets::tar_make(names = c(genotypes_clean, genotypes_quality_files))'
