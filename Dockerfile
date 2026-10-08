@@ -2,7 +2,6 @@ FROM bioconductor/tidyverse:3.17
 
 LABEL maintainer="Michael Levin <michael.levin@pennmedicine.upenn.edu>"
 LABEL description="LPA Prediction Validation Pipeline"
-LABEL version="0.2.0"
 
 # Accept GitHub PAT as build argument
 ARG GITHUB_PAT
@@ -65,10 +64,18 @@ COPY rmarkdown/*.yaml /opt/lpa-pipeline/rmarkdown/
 COPY Scripts/ /opt/lpa-pipeline/Scripts/
 COPY Resources/ /opt/lpa-pipeline/Resources/
 
-# Create version file
-RUN echo "0.2.0" > /opt/lpa-pipeline/VERSION && \
-    echo "Built: $(date)" >> /opt/lpa-pipeline/VERSION && \
-    echo "Git commit: ${GITHUB_SHA:-unknown}" >> /opt/lpa-pipeline/VERSION
+# Version information, passed in by the Docker build workflow.
+# Declared here (not at the top) so a new version or commit only invalidates
+# the layers below, and the slow renv restore above stays cached.
+ARG PIPELINE_VERSION=dev
+ARG GIT_SHA=unknown
+LABEL version="${PIPELINE_VERSION}"
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+
+# Create version file (shown by `--version`)
+RUN echo "Version: ${PIPELINE_VERSION}" > /opt/lpa-pipeline/VERSION && \
+    echo "Built: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> /opt/lpa-pipeline/VERSION && \
+    echo "Git commit: ${GIT_SHA}" >> /opt/lpa-pipeline/VERSION
 
 # Copy the enhanced entrypoint script
 COPY entrypoint.sh /usr/local/bin/run-lpa-pipeline.sh
