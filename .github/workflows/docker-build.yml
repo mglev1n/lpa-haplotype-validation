@@ -68,7 +68,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Token for private R packages; passed as a BuildKit secret so it is not
+          # stored in the image (see Dockerfile)
+          secrets: |
+            github_pat=${{ secrets.R_GITHUB_PAT_LPAPREDICTR }}
           build-args: |
-            GITHUB_PAT=${{ secrets.R_GITHUB_PAT_LPAPREDICTR }}
             PIPELINE_VERSION=${{ steps.version.outputs.VERSION }}
             GIT_SHA=${{ github.sha }}

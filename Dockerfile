@@ -1,11 +1,14 @@
+# syntax=docker/dockerfile:1
 FROM bioconductor/tidyverse:3.17
 
 LABEL maintainer="Michael Levin <michael.levin@pennmedicine.upenn.edu>"
 LABEL description="LPA Prediction Validation Pipeline"
 
-# Accept GitHub PAT as build argument
-ARG GITHUB_PAT
-ENV GITHUB_PAT=$GITHUB_PAT
+# The GitHub token needed to install private R packages (lpapredictr) is
+# supplied as a BuildKit secret, not a build argument or environment variable,
+# so it is never stored in an image layer or the image configuration.
+# Local build:
+#   docker build --secret id=github_pat,env=GITHUB_PAT -t lpa-validation .
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -47,12 +50,17 @@ RUN R -e "install.packages('renv', repos = c(CRAN = 'https://cloud.r-project.org
 # Copy renv lockfile to a temporary location
 COPY renv.lock /tmp/renv.lock
 
-# Pre-install all packages during build time
-RUN mkdir -p /opt/lpa-pipeline && \
+# Pre-install all packages during build time. The token is read from the
+# secret mount and exported only for this command.
+RUN --mount=type=secret,id=github_pat \
+    mkdir -p /opt/lpa-pipeline && \
     cd /opt/lpa-pipeline && \
     cp /tmp/renv.lock renv.lock && \
-    R -e "Sys.setenv(GITHUB_PAT=Sys.getenv('GITHUB_PAT')); \
-         renv::restore(library='/opt/R-packages')"
+    if [ ! -s /run/secrets/github_pat ]; then \
+        echo "WARNING: github_pat build secret not provided; private GitHub packages will fail to install" >&2; \
+    fi && \
+    GITHUB_PAT="$(cat /run/secrets/github_pat 2>/dev/null || true)" \
+    R -e "renv::restore(library='/opt/R-packages')"
 
 # Set the R library path to use our pre-installed packages
 ENV R_LIBS_USER=/opt/R-packages
