@@ -28,21 +28,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install bcftools from source + shapeit5 from github
+# Install bcftools from source
 RUN git clone --recurse-submodules https://github.com/samtools/htslib.git /tmp/htslib \
     && git clone https://github.com/samtools/bcftools.git /tmp/bcftools \
     && cd /tmp/bcftools \
     && make \
     && make install \
     && cd / \
-    && rm -rf /tmp/htslib /tmp/bcftools \
-    # Download and install phase_common_static
-    && wget -O /usr/local/bin/phase_common_static https://github.com/odelaneau/shapeit5/releases/download/v5.1.1/phase_common_static \
-    && chmod +x /usr/local/bin/phase_common_static
+    && rm -rf /tmp/htslib /tmp/bcftools
 
-# Copy impute5 binary from the Applications folder in the repository
+# Copy ShapeIt5 and impute5 static binaries from the Applications folder.
+# ShapeIt5 was previously downloaded from the odelaneau/shapeit5 GitHub
+# releases; GitHub disabled that repository, and the download URL then
+# returned an HTML page that was installed in place of the binary.
+COPY Applications/shapeit5_v5.1.1/phase_common_static /usr/local/bin/phase_common_static
 COPY Applications/impute5_v1.2.0/impute5_v1.2.0_static /usr/local/bin/impute5
-RUN chmod +x /usr/local/bin/impute5
+
+# Fail the build unless both files are Linux executables (ELF), so a failed
+# download or a Git LFS pointer can never be installed as a binary again
+RUN chmod +x /usr/local/bin/phase_common_static /usr/local/bin/impute5 \
+    && for bin in /usr/local/bin/phase_common_static /usr/local/bin/impute5; do \
+        if [ "$(head -c 4 "$bin" | tail -c 3)" != "ELF" ]; then \
+            echo "ERROR: $bin is not an ELF executable" >&2; head -c 200 "$bin" >&2; exit 1; \
+        fi; \
+    done
 
 # Install renv and required packages
 RUN R -e "install.packages('renv', repos = c(CRAN = 'https://cloud.r-project.org'))"

@@ -1,0 +1,11 @@
+phase_common_static provenance
+Extracted: 2026-10-08 11:49:47 UTC by mglevin on roubaix
+Source container: /project/damrauer_shared/Users/mglevin/lpa-haplotype-validation/containers/lpa-validation-singularity_latest.sif
+Source container modified: 2025-09-10 09:49:24.015718950 -0400
+Source path in container: /usr/local/bin/phase_common_static
+Container version file:
+  0.2.0
+  Built: Wed Sep 10 01:31:50 PM UTC 2025
+  Git commit: unknown
+SHA-256: a6a69f54cbc6b20a49a06ecb07506e77bac466aba1dc6e650dbabd5cf24abf23
+Size: 10108328 bytes
