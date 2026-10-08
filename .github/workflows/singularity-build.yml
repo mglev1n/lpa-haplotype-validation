@@ -1,18 +1,21 @@
 name: Build and Push Singularity Image
 
 on:
-  # Run after the Docker image build completes
+  # Run only after the Docker image build completes, so the Docker image this
+  # workflow converts always exists. Release tags (v*) are included because a
+  # tag-triggered Docker run reports the tag name as its branch.
   workflow_run:
     workflows: ["Build and Push Docker Image"]
     types:
       - completed
-    branches: [main, master]
-  # Also trigger on tag push
-  push:
-    tags:
-      - 'v*'
-  # Allow manual trigger
+    branches: [main, master, 'v*']
+  # Allow manual conversion of an existing Docker image tag
   workflow_dispatch:
+    inputs:
+      docker_tag:
+        description: "Existing Docker image tag to convert (e.g. 0.3.0, sha-1a2b3c4, latest)"
+        required: true
+        default: latest
 
 env:
   REGISTRY: ghcr.io
@@ -23,24 +26,45 @@ jobs:
   build-singularity:
     name: Build and Push Singularity Image
     runs-on: ubuntu-latest
-    # Only run if the Docker build succeeded or if triggered by tag or manually
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    # Only run if the Docker build succeeded, or if triggered manually
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
-      contents: read
+      contents: write   # create GitHub releases for v* tags
       packages: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Get version for tagging
-        id: get_version
+      - name: Determine source image and tags
+        id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.docker_tag }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            SOURCE_TAG="$DISPATCH_TAG"
+            PUSH_TAGS="$DISPATCH_TAG"
+            RELEASE_TAG=""
           else
-            echo "VERSION=latest" >> $GITHUB_OUTPUT
+            SHORT_SHA="${HEAD_SHA::7}"
+            # Convert the commit-specific Docker image, not :latest, so a later
+            # build cannot change what this run converts
+            SOURCE_TAG="sha-${SHORT_SHA}"
+            if [[ "$HEAD_BRANCH" =~ ^v[0-9] ]]; then
+              # Release: v0.3.0 -> 0.3.0, matching the Docker semver tag
+              VERSION="${HEAD_BRANCH#v}"
+              PUSH_TAGS="${VERSION} sha-${SHORT_SHA} latest"
+              RELEASE_TAG="$HEAD_BRANCH"
+            else
+              PUSH_TAGS="sha-${SHORT_SHA} latest"
+              RELEASE_TAG=""
+            fi
           fi
+          echo "SOURCE_TAG=${SOURCE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "PUSH_TAGS=${PUSH_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Converting docker image tag: ${SOURCE_TAG}"
+          echo "Pushing Singularity tags: ${PUSH_TAGS}"
 
       - name: Setup Apptainer
         uses: eWaterCycle/setup-apptainer@v2
@@ -56,7 +80,7 @@ jobs:
 
       - name: Build Singularity image from Docker image
         run: |
-          apptainer build ${SINGULARITY_IMAGE} docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}
+          apptainer build ${SINGULARITY_IMAGE} docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.SOURCE_TAG }}
 
       - name: Login to GHCR with Apptainer
         run: |
@@ -64,7 +88,10 @@ jobs:
 
       - name: Push Singularity image to GHCR
         run: |
-          apptainer push ${SINGULARITY_IMAGE} oras://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-singularity:${{ steps.get_version.outputs.VERSION }}
+          for tag in ${{ steps.tags.outputs.PUSH_TAGS }}; do
+            echo "Pushing ${{ env.IMAGE_NAME }}-singularity:${tag}"
+            apptainer push ${SINGULARITY_IMAGE} oras://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-singularity:${tag}
+          done
 
       - name: Upload Singularity image as artifact
         uses: actions/upload-artifact@v4
@@ -75,8 +102,9 @@ jobs:
 
       - name: Create Release (if tag)
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ steps.tags.outputs.RELEASE_TAG != '' }}
         with:
+          tag_name: ${{ steps.tags.outputs.RELEASE_TAG }}
           files: ${{ env.SINGULARITY_IMAGE }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

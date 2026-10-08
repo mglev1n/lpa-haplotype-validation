@@ -159,11 +159,15 @@ singularity remote login --username github_username oras://ghcr.io/mglev1n/lpa-v
 
 **Step 4:** Download and run the container
 ```bash
-# Download the container (one-time setup)
-singularity pull oras://ghcr.io/mglev1n/lpa-validation-singularity:latest
+# Download a pinned release of the container (one-time setup)
+# Use the version specified by the study coordinators; see "Container Versions" below
+singularity pull oras://ghcr.io/mglev1n/lpa-validation-singularity:0.3.0
 
 # Run the pipeline
-singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_latest.sif
+singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.0.sif
+
+# Confirm which version you ran
+singularity run lpa-validation-singularity_0.3.0.sif --version
 ```
 
 **For HPC clusters with job schedulers:**
@@ -171,7 +175,7 @@ singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_latest.si
 # Example LSF submission (4 cores, 16 GB memory)
 bsub -n 4 -M 16000 -R "rusage[mem=16000]" \
   "module load singularity; \
-   singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_latest.sif"
+   singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.0.sif"
 ```
 
 **Troubleshooting tips:**
@@ -185,8 +189,56 @@ bsub -n 4 -M 16000 -R "rusage[mem=16000]" \
 cd /path/to/lpa-validation-project
 
 # Run the pipeline
-docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:latest
+docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:0.3.0
 ```
+
+### Container Versions
+
+Each container build is published under several tags. Use a release tag so that every cohort runs the same pipeline version.
+
+| Tag | Example | Meaning |
+|-----|---------|---------|
+| Release | `0.3.0` | Fixed release, built from a `v0.3.0` Git tag. Recommended. |
+| Commit | `sha-1a2b3c4` | Fixed build of one Git commit, including untagged commits on `main`. |
+| `latest` | `latest` | Most recent build. Changes whenever `main` is updated; not recommended for multi-site analyses. |
+
+The Docker image (`ghcr.io/mglev1n/lpa-validation`) and the Singularity image (`ghcr.io/mglev1n/lpa-validation-singularity`) use the same tags. `--version` prints the version and Git commit of the container you are running. Release builds report the release number; builds of untagged commits report `dev-<commit>`.
+
+Maintainers publish a release by pushing a Git tag: `git tag v0.3.0 && git push origin v0.3.0`. The Docker workflow builds the image, and the Singularity workflow then converts it and attaches the `.sif` file to a GitHub release.
+
+### Genotype Preprocessing Only
+
+The `--preprocess-only` flag runs only the genotype preprocessing step: chromosome-name harmonization, indexing, SHAPEIT5 phasing, impute5 imputation of missing model sites (if needed), and extraction of the model sites with AN/AC tags. It skips Lp(a) prediction and validation, so `input/measured.csv` is not required.
+
+```bash
+# Singularity/Apptainer
+singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_0.3.0.sif --preprocess-only
+
+# Docker
+docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:0.3.0 --preprocess-only
+
+# Local installation
+Rscript -e 'targets::tar_make(names = c(genotypes_clean, genotypes_quality_files))'
+```
+
+The preprocessing step writes these files to `input/`:
+- `genotypes_processed.bcf` - phased genotypes at the model sites, ready for `lpapredictr`
+- `genotypes_processed.imputation_quality.vcf.gz` - sites-only VCF of imputation quality measures at the model sites (see below)
+- `genotypes_processed.imputation_quality.tsv` - the same measures as a table, one row per site
+- `preprocessing_summary.txt` - site coverage, imputation steps performed, and sample counts
+- `preprocessing.log` - full log of the preprocessing run
+- `final_stats.txt` - `bcftools stats` output for the processed genotypes
+
+#### Imputation Quality Measures
+
+The imputation quality files contain one record per model site in `genotypes_processed.bcf`:
+- `IN_INPUT` - 1 if the site was present in the input VCF; 0 if impute5 added it
+- `INPUT_*` - INFO tags carried over from the input VCF, such as `INPUT_R2` from upstream imputation (for example, TOPMed or Michigan Imputation Server output)
+- `IMPUTE5_*` - INFO tags written by impute5, such as the `IMPUTE5_INFO` score; present only if impute5 ran
+
+The available `INPUT_*` and `IMPUTE5_*` columns depend on the tags in your input VCF and on the impute5 version. The full pipeline also writes this table to `Results/site_imputation_quality.csv`, which is included in the results archive.
+
+Preprocess-only mode builds the same `genotypes_clean` target as the full pipeline. A later full run in the same directory therefore reuses the cached preprocessing output instead of repeating phasing and imputation.
 
 ### Option 3: Local Installation (Advanced Users)
 
