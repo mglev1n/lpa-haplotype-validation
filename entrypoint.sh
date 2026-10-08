@@ -10,6 +10,7 @@ VERBOSE=false
 SHOW_HELP=false
 SHOW_VERSION=false
 RUN_PIPELINE=true
+PREPROCESS_ONLY=false
 
 # Color codes for output
 RED='\033[0;31m'
@@ -32,6 +33,8 @@ Options:
     --version           Show container version information
     --help              Show this help message
     --shell             Start an interactive shell instead of running pipeline
+    --preprocess-only   Run only genotype preprocessing (QC, phasing/imputation,
+                        extraction of model sites); skip prediction and validation
 
 File Management:
     By default, the container copies pipeline files (_targets.R, Scripts/, Resources/,
@@ -54,12 +57,18 @@ Examples:
     # Check container version
     singularity run container.sif --version
 
+    # Preprocess genotypes only (no measured.csv required)
+    singularity run container.sif --preprocess-only
+
 Requirements:
     Your working directory must contain:
     - input/genotypes.vcf.gz
-    - input/measured.csv
+    - input/measured.csv  (not required with --preprocess-only)
 
     Results will be written to Results/ directory.
+    With --preprocess-only, the processed genotypes are written to
+    input/genotypes_processed.bcf, alongside preprocessing.log,
+    preprocessing_summary.txt, and final_stats.txt.
 EOF
 }
 
@@ -127,6 +136,10 @@ while [[ $# -gt 0 ]]; do
             RUN_PIPELINE=false
             shift
             ;;
+        --preprocess-only)
+            PREPROCESS_ONLY=true
+            shift
+            ;;
         *)
             error "Unknown option: $1. Use --help for usage information."
             ;;
@@ -174,7 +187,8 @@ if [ ! -f "input/genotypes.vcf.gz" ]; then
     error "Required input file not found: ./input/genotypes.vcf.gz"
 fi
 
-if [ ! -f "input/measured.csv" ]; then
+# measured.csv is only needed for prediction/validation, not preprocessing
+if [[ "$PREPROCESS_ONLY" != "true" ]] && [ ! -f "input/measured.csv" ]; then
     error "Required input file not found: ./input/measured.csv"
 fi
 
@@ -240,7 +254,9 @@ copy_files() {
 
 log "Found required input files:"
 log "- ./input/genotypes.vcf.gz"
-log "- ./input/measured.csv"
+if [[ "$PREPROCESS_ONLY" != "true" ]]; then
+    log "- ./input/measured.csv"
+fi
 echo ""
 
 # Copy pipeline files with respect to --no-overwrite flag
@@ -265,8 +281,22 @@ if [[ "$VERBOSE" == "true" ]]; then
     echo ""
 fi
 
+# Select which targets to build. In preprocess-only mode, build only the
+# genotypes_clean target (and its upstream vcf_file target). Because this uses
+# the same targets store, a later full run reuses the cached preprocessing.
+if [[ "$PREPROCESS_ONLY" == "true" ]]; then
+    TAR_NAMES_ARG="names = genotypes_clean"
+    log "Preprocess-only mode: running genotype preprocessing only"
+else
+    TAR_NAMES_ARG=""
+fi
+
 # Run the pipeline
-log "Starting LPA prediction validation pipeline..."
+if [[ "$PREPROCESS_ONLY" == "true" ]]; then
+    log "Starting LPA genotype preprocessing..."
+else
+    log "Starting LPA prediction validation pipeline..."
+fi
 if [[ "$DEBUG_MODE" == "true" ]]; then
     log "Debug mode enabled - using verbose R output"
 fi
@@ -276,10 +306,10 @@ echo ""
 # Set R command arguments based on debug mode
 if [[ "$DEBUG_MODE" == "true" ]]; then
     R_ARGS="--vanilla"
-    R_CMD="targets::tar_make()"
+    R_CMD="targets::tar_make(${TAR_NAMES_ARG})"
 else
     R_ARGS="--slave --no-save --no-restore --vanilla"
-    R_CMD="targets::tar_make(callr_arguments = list(cmdargs = c('--slave', '--no-save', '--no-restore', '--vanilla')))"
+    R_CMD="targets::tar_make(${TAR_NAMES_ARG:+${TAR_NAMES_ARG}, }callr_arguments = list(cmdargs = c('--slave', '--no-save', '--no-restore', '--vanilla')))"
 fi
 
 # Run R with appropriate arguments
@@ -289,8 +319,18 @@ fi
 
 R $R_ARGS -e "$R_CMD"
 
-# Check if report was generated
-if [ -f "Results/lpa_validation_report.html" ]; then
+# Check outputs. tar_make() runs with error = "continue", so a failed target
+# does not necessarily produce a non-zero exit code; check the files instead.
+if [[ "$PREPROCESS_ONLY" == "true" ]]; then
+    if [ -f "input/genotypes_processed.bcf" ]; then
+        log "Preprocessing completed successfully."
+        log "Processed genotypes: ./input/genotypes_processed.bcf"
+        log "Summary: ./input/preprocessing_summary.txt"
+        log "Log: ./input/preprocessing.log"
+    else
+        error "Preprocessing did not produce ./input/genotypes_processed.bcf. Check ./input/preprocessing.log."
+    fi
+elif [ -f "Results/lpa_validation_report.html" ]; then
     log "Validation report generated successfully."
     log "You can find all results in the Results directory."
 else

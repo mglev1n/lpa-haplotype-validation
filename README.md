@@ -188,6 +188,29 @@ cd /path/to/lpa-validation-project
 docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:latest
 ```
 
+### Genotype Preprocessing Only
+
+The `--preprocess-only` flag runs only the genotype preprocessing step: chromosome-name harmonization, indexing, SHAPEIT5 phasing, impute5 imputation of missing model sites (if needed), and extraction of the model sites with AN/AC tags. It skips Lp(a) prediction and validation, so `input/measured.csv` is not required.
+
+```bash
+# Singularity/Apptainer
+singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_latest.sif --preprocess-only
+
+# Docker
+docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:latest --preprocess-only
+
+# Local installation
+Rscript -e 'targets::tar_make(names = genotypes_clean)'
+```
+
+The preprocessing step writes these files to `input/`:
+- `genotypes_processed.bcf` - phased genotypes at the model sites, ready for `lpapredictr`
+- `preprocessing_summary.txt` - site coverage, imputation steps performed, and sample counts
+- `preprocessing.log` - full log of the preprocessing run
+- `final_stats.txt` - `bcftools stats` output for the processed genotypes
+
+Preprocess-only mode builds the same `genotypes_clean` target as the full pipeline. A later full run in the same directory therefore reuses the cached preprocessing output instead of repeating phasing and imputation.
+
 ### Option 3: Local Installation (Advanced Users)
 
 > [!CAUTION]
