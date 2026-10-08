@@ -200,14 +200,25 @@ singularity run --pwd /work -B $(pwd):/work lpa-validation-singularity_latest.si
 docker run --rm -v $(pwd):/work ghcr.io/mglev1n/lpa-validation:latest --preprocess-only
 
 # Local installation
-Rscript -e 'targets::tar_make(names = genotypes_clean)'
+Rscript -e 'targets::tar_make(names = c(genotypes_clean, genotypes_quality_files))'
 ```
 
 The preprocessing step writes these files to `input/`:
 - `genotypes_processed.bcf` - phased genotypes at the model sites, ready for `lpapredictr`
+- `genotypes_processed.imputation_quality.vcf.gz` - sites-only VCF of imputation quality measures at the model sites (see below)
+- `genotypes_processed.imputation_quality.tsv` - the same measures as a table, one row per site
 - `preprocessing_summary.txt` - site coverage, imputation steps performed, and sample counts
 - `preprocessing.log` - full log of the preprocessing run
 - `final_stats.txt` - `bcftools stats` output for the processed genotypes
+
+#### Imputation Quality Measures
+
+The imputation quality files contain one record per model site in `genotypes_processed.bcf`:
+- `IN_INPUT` - 1 if the site was present in the input VCF; 0 if impute5 added it
+- `INPUT_*` - INFO tags carried over from the input VCF, such as `INPUT_R2` from upstream imputation (for example, TOPMed or Michigan Imputation Server output)
+- `IMPUTE5_*` - INFO tags written by impute5, such as the `IMPUTE5_INFO` score; present only if impute5 ran
+
+The available `INPUT_*` and `IMPUTE5_*` columns depend on the tags in your input VCF and on the impute5 version. The full pipeline also writes this table to `Results/site_imputation_quality.csv`, which is included in the results archive.
 
 Preprocess-only mode builds the same `genotypes_clean` target as the full pipeline. A later full run in the same directory therefore reuses the cached preprocessing output instead of repeating phasing and imputation.
 

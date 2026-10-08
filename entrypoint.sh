@@ -67,8 +67,9 @@ Requirements:
 
     Results will be written to Results/ directory.
     With --preprocess-only, the processed genotypes are written to
-    input/genotypes_processed.bcf, alongside preprocessing.log,
-    preprocessing_summary.txt, and final_stats.txt.
+    input/genotypes_processed.bcf, alongside imputation quality measures
+    (genotypes_processed.imputation_quality.vcf.gz and .tsv),
+    preprocessing.log, preprocessing_summary.txt, and final_stats.txt.
 EOF
 }
 
@@ -282,10 +283,11 @@ if [[ "$VERBOSE" == "true" ]]; then
 fi
 
 # Select which targets to build. In preprocess-only mode, build only the
-# genotypes_clean target (and its upstream vcf_file target). Because this uses
-# the same targets store, a later full run reuses the cached preprocessing.
+# genotypes_clean and genotypes_quality_files targets (and their upstream
+# vcf_file target). Because this uses the same targets store, a later full run
+# reuses the cached preprocessing.
 if [[ "$PREPROCESS_ONLY" == "true" ]]; then
-    TAR_NAMES_ARG="names = genotypes_clean"
+    TAR_NAMES_ARG="names = c(genotypes_clean, genotypes_quality_files)"
     log "Preprocess-only mode: running genotype preprocessing only"
 else
     TAR_NAMES_ARG=""
@@ -325,6 +327,7 @@ if [[ "$PREPROCESS_ONLY" == "true" ]]; then
     if [ -f "input/genotypes_processed.bcf" ]; then
         log "Preprocessing completed successfully."
         log "Processed genotypes: ./input/genotypes_processed.bcf"
+        log "Imputation quality: ./input/genotypes_processed.imputation_quality.tsv"
         log "Summary: ./input/preprocessing_summary.txt"
         log "Log: ./input/preprocessing.log"
     else

@@ -127,6 +127,63 @@ fill_tags() {
     bcftools index -f "$output_file"
 }
 
+# Function to extract model sites from a VCF/BCF.
+# Writes two files:
+#   - a genotype BCF with INFO removed (GT only), used for LPA prediction
+#   - a sites-only BCF that keeps the full INFO field, which carries the
+#     imputation quality measures (e.g. R2 from upstream imputation, INFO from impute5)
+extract_model_sites() {
+    local input_file=$1
+    local out_gt_bcf=$2
+    local out_sites_bcf=$3
+    local isec_bcf="${out_gt_bcf%.bcf}.isec.bcf"
+
+    bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ob -o "$isec_bcf" \
+        "$input_file" \
+        "$SITES_VCF"
+    bcftools index -f "$isec_bcf"
+
+    bcftools view -G -Ob -o "$out_sites_bcf" "$isec_bcf"
+    bcftools index -f "$out_sites_bcf"
+
+    bcftools annotate -x INFO,^FMT/GT -Ob -o "$out_gt_bcf" "$isec_bcf"
+    bcftools index -f "$out_gt_bcf"
+}
+
+# Function to add a prefix to every INFO tag in a sites-only file, so that
+# quality measures from different sources (input data, impute5) can be stored
+# in one file without name clashes. AN/AC are dropped; they describe allele
+# counts, not quality, and are recomputed in the genotype output.
+prefix_info_tags() {
+    local input_file=$1
+    local output_file=$2
+    local prefix=$3
+    local rename_file="${output_file}.rename.txt"
+    local info_tags drop_tags
+
+    info_tags=$(bcftools view -h "$input_file" | sed -n 's/^##INFO=<ID=\([^,]*\),.*/\1/p')
+
+    # Drop AN/AC only if present (avoids bcftools warnings for undefined tags)
+    drop_tags=$(echo "$info_tags" | awk '$1 == "AN" || $1 == "AC" {printf "%sINFO/%s", sep, $1; sep=","}')
+
+    echo "$info_tags" \
+        | awk -v p="$prefix" 'NF && $1 != "AN" && $1 != "AC" {print "INFO/"$1"\t"p$1}' \
+        > "$rename_file"
+
+    if [[ -n "$drop_tags" ]]; then
+        bcftools annotate -x "$drop_tags" -Ob -o "${output_file}.tmp.bcf" "$input_file"
+    else
+        bcftools view -Ob -o "${output_file}.tmp.bcf" "$input_file"
+    fi
+
+    if [[ -s "$rename_file" ]]; then
+        bcftools annotate --rename-annots "$rename_file" -Ob -o "$output_file" "${output_file}.tmp.bcf"
+    else
+        mv "${output_file}.tmp.bcf" "$output_file"
+    fi
+    bcftools index -f "$output_file"
+}
+
 # Parse command line arguments
 PARAMS=""
 while (( "$#" )); do
@@ -318,6 +375,9 @@ CHR_FIXED_TAGGED_VCF="$TEMP_DIR/${BASENAME}.chr6.tagged.bcf"
 EXTRACTED_BCF="$TEMP_DIR/${BASENAME}.extracted.bcf"
 IMPUTED_BCF="$TEMP_DIR/${BASENAME}.imputed.bcf"
 TEMP_FINAL_BCF="$TEMP_DIR/${BASENAME}.final.bcf"
+INPUT_SITES_BCF="$TEMP_DIR/${BASENAME}.input.sites.bcf"
+SHAPEIT5_SITES_BCF="$TEMP_DIR/${BASENAME}.shapeit5.sites.bcf"
+IMPUTE5_SITES_BCF="$TEMP_DIR/${BASENAME}.impute5.sites.bcf"
 
 # Set output filename - use custom name if provided, otherwise use default
 if [[ -n "$OUTPUT_FILENAME" ]]; then
@@ -325,6 +385,10 @@ if [[ -n "$OUTPUT_FILENAME" ]]; then
 else
     FINAL_BCF="$OUTPUT_DIR/${BASENAME}.processed.bcf"
 fi
+
+# Imputation quality outputs, named after the final genotype file
+QUALITY_VCF="${FINAL_BCF%.*}.imputation_quality.vcf.gz"
+QUALITY_TSV="${FINAL_BCF%.*}.imputation_quality.tsv"
 
 CHR_RENAME_FILE="$TEMP_DIR/chr_rename.txt"
 LOG_FILE="$OUTPUT_DIR/preprocessing.log"
@@ -373,12 +437,9 @@ fi
 
 # Step 4: Extract variants at model sites
 log "Extracting variants at model sites..."
-bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
-    "$WORKING_VCF" \
-    "$SITES_VCF" \
-    | bcftools annotate -x INFO,^FMT/GT -Ob -o "$EXTRACTED_BCF"
-
-bcftools index -f "$EXTRACTED_BCF"
+# INPUT_SITES_BCF keeps the INFO field of the input data at the model sites
+extract_model_sites "$WORKING_VCF" "$EXTRACTED_BCF" "$INPUT_SITES_BCF"
+FINAL_STAGE_SITES_BCF="$INPUT_SITES_BCF"
 
 # Step 5: Check coverage and missing data
 log "Checking coverage of model sites and missing genotypes..."
@@ -441,10 +502,8 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
 
     # Re-extract after imputation (before filling tags)
     log "Re-extracting variants after ShapeIt5 imputation..."
-    bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
-        "$IMPUTED_BCF" \
-        "$SITES_VCF" \
-        | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
+    extract_model_sites "$IMPUTED_BCF" "$TEMP_FINAL_BCF" "$SHAPEIT5_SITES_BCF"
+    FINAL_STAGE_SITES_BCF="$SHAPEIT5_SITES_BCF"
 
     # Check coverage after shapeit5
     N_SHAPEIT5_FINAL=$(bcftools view -H "$TEMP_FINAL_BCF" | wc -l)
@@ -485,10 +544,9 @@ if [[ "$NEED_IMPUTATION" == "true" ]]; then
 
         # Re-extract after impute5 (before filling tags)
         log "Re-extracting variants after impute5..."
-        bcftools isec -c none -r "$EXTRACTION_REGION" -n=2 -w1 -Ou \
-            "$IMPUTE5_BCF" \
-            "$SITES_VCF" \
-            | bcftools annotate -x INFO,^FMT/GT -Ob -o "$TEMP_FINAL_BCF"
+        # IMPUTE5_SITES_BCF keeps the impute5 INFO field (imputation quality)
+        extract_model_sites "$IMPUTE5_BCF" "$TEMP_FINAL_BCF" "$IMPUTE5_SITES_BCF"
+        FINAL_STAGE_SITES_BCF="$IMPUTE5_SITES_BCF"
 
         log "impute5 imputation completed"
     fi
@@ -529,7 +587,64 @@ else
     N_SHAPEIT5_FINAL="N/A (no imputation needed)"
 fi
 
-# Step 8: Final validation
+# Step 8: Write imputation quality measures for the final model sites
+# The sites-only VCF contains one record per site in the final genotype output:
+#   - INPUT_*  : INFO tags from the input data (e.g. INPUT_R2 from upstream imputation)
+#   - IMPUTE5_*: INFO tags from impute5 (only if impute5 ran)
+#   - IN_INPUT : flag set when the site was present in the input data; sites
+#                without the flag were added by impute5
+log "Writing imputation quality measures..."
+QUALITY_BASE_BCF="$TEMP_DIR/quality.base.bcf"
+INPUT_SITES_PREFIXED_BCF="$TEMP_DIR/input.sites.prefixed.bcf"
+QUALITY_HEADER="$TEMP_DIR/quality.header.txt"
+
+prefix_info_tags "$INPUT_SITES_BCF" "$INPUT_SITES_PREFIXED_BCF" "INPUT_"
+
+if [[ "$FINAL_STAGE_SITES_BCF" == "$IMPUTE5_SITES_BCF" ]]; then
+    prefix_info_tags "$IMPUTE5_SITES_BCF" "$QUALITY_BASE_BCF" "IMPUTE5_"
+else
+    # ShapeIt5 phasing does not produce quality measures; keep only the site list
+    bcftools annotate -x INFO -Ob -o "$QUALITY_BASE_BCF" "$FINAL_STAGE_SITES_BCF"
+    bcftools index -f "$QUALITY_BASE_BCF"
+fi
+
+echo '##INFO=<ID=IN_INPUT,Number=0,Type=Flag,Description="Site present in the input genotypes; sites without this flag were imputed by impute5">' \
+    > "$QUALITY_HEADER"
+
+bcftools annotate -a "$INPUT_SITES_PREFIXED_BCF" -c INFO -m +IN_INPUT -h "$QUALITY_HEADER" \
+    -Oz -o "$QUALITY_VCF" "$QUALITY_BASE_BCF"
+bcftools index -t -f "$QUALITY_VCF"
+
+# Flat table of the same measures, one column per INFO tag. Flag tags are
+# written as 1 (set) or 0 (not set); missing values are written as NA.
+QUALITY_TAGS=$(bcftools view -h "$QUALITY_VCF" | sed -n 's/^##INFO=<ID=\([^,]*\),.*/\1/p' | grep -v -x "IN_INPUT" || true)
+QUALITY_FLAG_TAGS=$(bcftools view -h "$QUALITY_VCF" | sed -n 's/^##INFO=<ID=\([^,]*\),.*Type=Flag.*/\1/p' | tr '\n' ' ')
+QUALITY_FORMAT='%CHROM\t%POS\t%ID\t%REF\t%ALT\t%INFO/IN_INPUT'
+QUALITY_COLUMNS='CHROM\tPOS\tID\tREF\tALT\tIN_INPUT'
+for tag in $QUALITY_TAGS; do
+    QUALITY_FORMAT="${QUALITY_FORMAT}\t%INFO/${tag}"
+    QUALITY_COLUMNS="${QUALITY_COLUMNS}\t${tag}"
+done
+{
+    echo -e "$QUALITY_COLUMNS"
+    bcftools query -f "${QUALITY_FORMAT}\n" "$QUALITY_VCF"
+} | awk -F '\t' -v OFS='\t' -v flags="$QUALITY_FLAG_TAGS" '
+    BEGIN { n = split(flags, f, " "); for (i = 1; i <= n; i++) is_flag[f[i]] = 1 }
+    NR == 1 { for (i = 1; i <= NF; i++) col_is_flag[i] = ($i in is_flag); print; next }
+    {
+        for (i = 6; i <= NF; i++) {
+            if (col_is_flag[i]) { $i = ($i == "1") ? 1 : 0 }
+            else if ($i == ".") { $i = "NA" }
+        }
+        print
+    }' > "$QUALITY_TSV"
+
+N_IMPUTED_BY_IMPUTE5=$(bcftools view -H -i 'INFO/IN_INPUT=0' "$QUALITY_VCF" | wc -l)
+log "Imputation quality VCF: $QUALITY_VCF"
+log "Imputation quality table: $QUALITY_TSV"
+log "Sites added by impute5: $N_IMPUTED_BY_IMPUTE5"
+
+# Step 9: Final validation
 log "Performing final validation..."
 
 # Verify AN/AC tags are present
@@ -588,6 +703,9 @@ Total samples: $(bcftools query -l "$FINAL_BCF" | wc -l)
 Multiallelic sites: $N_MULTIALLELIC
 Samples with missing data (final): $FINAL_MISSING
 AN/AC tags present: $(if [[ "$AN_COUNT" -gt 0 && "$AC_COUNT" -gt 0 ]]; then echo "Yes"; else echo "No"; fi)
+Sites added by impute5: $N_IMPUTED_BY_IMPUTE5
+Imputation quality (sites-only VCF): $QUALITY_VCF
+Imputation quality (table): $QUALITY_TSV
 EOF
 
 cat "$OUTPUT_DIR/preprocessing_summary.txt"

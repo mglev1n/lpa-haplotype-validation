@@ -122,6 +122,40 @@ list(
            description = "Process VCF file to impute missing variants and extract relevant SNPs"
   ),
 
+  ## Imputation Quality -----------------------------------------------------
+  tar_file(
+    genotypes_quality_files,
+    {
+      # Written by lpa_processing.sh alongside genotypes_clean:
+      #   [1] sites-only VCF with INPUT_* and IMPUTE5_* INFO tags and the IN_INPUT flag
+      #   [2] the same measures as a tab-separated table
+      file_paths <- c(
+        sub("\\.bcf$", ".imputation_quality.vcf.gz", genotypes_clean),
+        sub("\\.bcf$", ".imputation_quality.tsv", genotypes_clean)
+      )
+      missing_files <- file_paths[!file.exists(file_paths)]
+      if (length(missing_files) > 0) {
+        stop("Imputation quality output not found: ", paste(missing_files, collapse = ", "))
+      }
+      file_paths
+    },
+    description = "Imputation quality measures at model sites (sites-only VCF and table)"
+  ),
+  tar_target(
+    genotypes_quality,
+    vroom::vroom(genotypes_quality_files[2], delim = "\t", na = "NA", show_col_types = FALSE),
+    description = "Site-level imputation quality measures at model sites"
+  ),
+  tar_file(
+    genotypes_quality_csv,
+    {
+      file_path <- "Results/site_imputation_quality.csv"
+      write.csv(genotypes_quality, file_path, row.names = FALSE)
+      file_path
+    },
+    description = "Save site-level imputation quality measures to CSV file"
+  ),
+
   # LPA Prediction ---------------------------------------------------------
   tar_target(
     lpa_predictions,
@@ -1632,8 +1666,9 @@ list(
       # Zip the Results directory and report
       zip_file <- "lpa_validation_results.zip"
 
-      # Ensure the report is included in the zip
+      # Ensure the report and imputation quality table are included in the zip
       report_file <- lpa_validation_report
+      force(genotypes_quality_csv)
       file.copy(report_file[1], "Results/lpa_validation_report.html", overwrite = TRUE)
 
       # Check if zip is available; if not, use alternative method
